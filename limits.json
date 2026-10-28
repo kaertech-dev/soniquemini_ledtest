@@ -1,0 +1,21 @@
+{
+    "led1": {"high": 320, "low": 250, "unit": ""}, 
+    "led2": {"high": 320, "low": 250, "unit": ""}, 
+    "led3": {"high": 320, "low": 250, "unit": ""}, 
+    "led4": {"high": 320, "low": 250, "unit": ""}, 
+    "led5": {"high": 320, "low": 250, "unit": ""}, 
+    "led6": {"high": 320, "low": 250, "unit": ""}, 
+    "led7": {"high": 320, "low": 250, "unit": ""}, 
+    "led8": {"high": 320, "low": 250, "unit": ""}, 
+    "led9": {"high": 320, "low": 250, "unit": ""}, 
+    "led10": {"high": 320, "low": 250, "unit": ""}, 
+    "led11": {"high": 320, "low": 250, "unit": ""}, 
+    "led12": {"high": 320, "low": 250, "unit": ""}, 
+    "led13": {"high": 320, "low": 250, "unit": ""}, 
+    "led14": {"high": 320, "low": 250, "unit": ""}, 
+    "led15": {"high": 320, "low": 250, "unit": ""}, 
+    "led16": {"high": 320, "low": 250, "unit": ""},
+    "mode1_curr": {"high": 165, "low": 155, "unit": "mA"},
+    "mode2_curr": {"high": 190, "low": 175, "unit": "mA"},
+    "mode3_curr": {"high": 250, "low": 235, "unit": "mA"}
+}
