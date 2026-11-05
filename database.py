@@ -221,7 +221,7 @@ class DatabaseConn:
         last_rep = cursor.fetchone()['test_rep']
 
         new_serial = f"{serial_num}_{last_rep}"
-        set_query = " UPDATE `"+ self.table_name +"` SET `serial_num` = %s WHERE `serial_num` = %s "
+        set_query = " UPDATE "+ self.table_name +" SET `serial_num` = %s WHERE `serial_num` = %s "
         cursor.execute(set_query, (new_serial, serial_num))
 
     def db_insert(self, head_details: dict, data: dict, tail_details: dict):
