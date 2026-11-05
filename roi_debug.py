@@ -74,7 +74,7 @@ class RoiItem(QGraphicsRectItem):
 class VideoThread(QThread):
     change_pixmap_signal = pyqtSignal(np.ndarray)
 
-    def __init__(self, source=0):
+    def __init__(self, source):
         super().__init__()
         self._run_flag = True
         self.source = source
@@ -128,7 +128,7 @@ class VideoThread(QThread):
         self.wait()
 
 class ImageEditor(QDialog):
-    def __init__(self):
+    def __init__(self, cam_src:int = 1):
         super().__init__()
         uic.loadUi(get_path('layout/image_editor.ui'), self)
 
@@ -140,7 +140,7 @@ class ImageEditor(QDialog):
         self.pixmapItem = QGraphicsPixmapItem()
         self.scene.addItem(self.pixmapItem)
 
-        self.vthread = VideoThread(1)
+        self.vthread = VideoThread(cam_src)
         # self.vthread.change_pixmap_signal.connect(self.update_image)
         br, con, exp, foc, zoom = self.vthread.read_cam_prop()
         self.camera_config = {'brightness': br, 'contrast': con, 'exposure': exp, 'focus': foc, 'zoom': zoom}
@@ -160,11 +160,16 @@ class ImageEditor(QDialog):
         self.zoom_input.valueChanged.connect(self.update_img_params)
 
     def init_spin_box(self, br, con, ex, foc, zm):
-        self.brightness_input.setValue(int(br))
-        self.contrast_input.setValue(int(con))
-        self.exposure_input.setValue(int(ex))
-        self.focus_input.setValue(int(foc))
-        self.zoom_input.setValue(int(zm))
+        if br:
+            self.brightness_input.setValue(int(br))
+        if con:
+            self.contrast_input.setValue(int(con))
+        if ex:
+            self.exposure_input.setValue(int(ex))
+        if foc:
+            self.focus_input.setValue(int(foc))
+        if zm:
+            self.zoom_input.setValue(int(zm))
 
     def update_image(self, cv_img):
         self.raw_image = cv_img
@@ -183,14 +188,8 @@ class ImageEditor(QDialog):
         foc = self.focus_input.value()
         zm = self.zoom_input.value()
         
-        # print('cam', br, con, exp)
         self.camera_config = {'brightness': br, 'contrast': con, 'exposure': exp, 'focus': foc, 'zoom': zm}
         self.vthread.set_cam_prop(br, con, exp, foc, zm)
-        # self.vthread.brightness = br
-        # self.vthread.contrast = con
-        # self.vthread.cam_exposure = exp
-        # self.vthread.focus = foc
-        # self.vthread.zoom = zm
 
     def save_and_exit(self):
         self.final_pixmap = self.pixmapItem.pixmap()
@@ -246,7 +245,7 @@ class ImageEditor(QDialog):
             # cv2.imwrite('roi_loc.jpg', raww)
 
 class DebugROI(QDialog):
-    def __init__(self):
+    def __init__(self, cam_params: dict):
         super().__init__()
         uic.loadUi(get_path('layout/debug_roi_compact.ui'), self)
         self.roi_size_default = 120
@@ -296,7 +295,7 @@ class DebugROI(QDialog):
 
         # self.pixmapItem.setPixmap(QPixmap(r"C:\Users\ai\led_detection\input_images\2026-08-07\112502_KLLM52830017.jpg"))
         self.img_editor = ImageEditor()
-        self.camera_config = {}
+        self.camera_config = cam_params
 
     def showEvent(self, event):
         event.accept()
@@ -315,6 +314,10 @@ class DebugROI(QDialog):
             return False
 
     def launch_img_editor(self):
+        ex = self.camera_config.get('exposure')
+        focus = self.camera_config.get('focus')
+        zoom = self.camera_config.get('zoom')
+        self.img_editor.init_spin_box(None, None, ex, focus, zoom)
         self.img_editor.exec()
 
         self.camera_config = self.img_editor.camera_config

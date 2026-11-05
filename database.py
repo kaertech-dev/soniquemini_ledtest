@@ -6,18 +6,16 @@ from pymysql.cursors import DictCursor
 DB_USER = os.getenv('DB_USER', 'labeling')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'labeling')
 
-DB_CONFIG = {
-    'user': DB_USER,
-    'password': DB_PASSWORD,
-    'autocommit': False,
-    'use_unicode': True,
-    'charset': 'utf8mb4'
-}
-
 class DatabaseConn:
     def __init__(self, db_host, schema: str, model: str, station: str):
-        self.config = DB_CONFIG
-        self.config['host'] = db_host
+        self.config = {
+                        'host': db_host,
+                        'user': DB_USER,
+                        'password': DB_PASSWORD,
+                        'autocommit': False,
+                        'use_unicode': True,
+                        'charset': 'utf8mb4'
+                    }
         self.schema = schema
         self.model = model
         self.station = station
@@ -164,6 +162,68 @@ class DatabaseConn:
         except AttributeError:
             return False, ''
 
+    def get_db_status(self, serial_num):
+        try:
+            with self.connect(self.schema) as dbconn:
+                with dbconn.cursor(DictCursor) as cursor:
+                    main_query = " SELECT * FROM " + f"`{self.model}_depanel`" + " WHERE `serial_num` = %s "
+                    cursor.execute(main_query, (serial_num,))
+                    depanel_status = cursor.fetchone()
+
+                    if not depanel_status:
+                        return {'error': "Serial Number not in Database"}
+
+                    ponum = depanel_status['po_num']
+
+                    if len(self.previous_stations) == 0:
+                        col_query = "DESCRIBE " + f"`{self.model}_main`"
+                        cursor.execute(col_query)
+                        results = cursor.fetchall()
+                        self.previous_stations = [col['Field'] for col in results]
+                        print(self.previous_stations)
+
+                    curr_test_rep = -1
+                    failed_stations = []
+                    for column in self.previous_stations:
+                        if column == 'serial_num' or column == 'po_num':
+                            continue
+                        elif column == self.station:
+                            retest_query = " SELECT `test_rep` FROM " + self.table_name + " WHERE `serial_num` LIKE %s ORDER BY `test_rep` DESC"
+                            cursor.execute(retest_query, (f'{serial_num}%',))
+                            curr_test_rep = len(cursor.fetchall()) + 1
+                            break
+                        else:
+                            table_name = f"`{self.model}_{column}`"
+                            sub_query = " SELECT `serial_num`, `status` FROM " + table_name + " WHERE `serial_num` = %s "
+                            cursor.execute(sub_query, (serial_num,))
+                            sub_status = cursor.fetchone()
+                            if not sub_status or sub_status['status'] == 0:
+                                failed_stations.append(column)
+
+                    if len(failed_stations) > 0:
+                        return {'error': "Unit did not pass " + ', '.join(failed_stations)}
+
+                    if curr_test_rep > 3 and curr_test_rep % 3 == 1:
+                        fa_query = " SELECT `serial_num`, `farepair_status` FROM `fa`.`main` WHERE `serial_num` = %s"
+                        cursor.execute(fa_query, (serial_num,))
+                        resp = cursor.fetchone()
+                        if not resp or resp['farepair_status'] != 4:
+                            return {'error': "No more retests allowed until FA"}
+                    
+                    return {'po_num': ponum, 'test_rep': curr_test_rep}
+
+        except Exception as e:
+            return {'error': str(e)}
+
+    def update_last_entry(self, cursor: DictCursor, serial_num: str):
+        get_query = " SELECT `serial_num`, `test_rep` FROM " + self.table_name + " WHERE `serial_num` LIKE %s ORDER BY `test_rep` DESC"
+        cursor.execute(get_query, (f"{serial_num}%",))
+        last_rep = cursor.fetchone()['test_rep']
+
+        new_serial = f"{serial_num}_{last_rep}"
+        set_query = " UPDATE `"+ self.table_name +"` SET `serial_num` = %s WHERE `serial_num` = %s "
+        cursor.execute(set_query, (new_serial, serial_num))
+
     def db_insert(self, head_details: dict, data: dict, tail_details: dict):
         all_values = head_details | data | tail_details
         serial_num = head_details.get('serial_num')
@@ -172,6 +232,9 @@ class DatabaseConn:
         try:
             with self.connect(self.schema) as conn:
                 with conn.cursor(DictCursor) as cursor:
+                    # if retest, update the last entry with underscore
+                    if tail_details.get('test_rep', 1) > 1:
+                        self.update_last_entry(cursor, serial_num)
                         
                     headers = ', '.join(all_values.keys())
                     s_set = ', '.join(['%s'] * len(all_values.keys()))
@@ -189,7 +252,7 @@ class DatabaseConn:
                         readback = len(cursor.fetchall())
 
                     if readback > 0:
-                        # change main as well to reflect the status
+                        # Update main to reflect new status
                         query = f" UPDATE `{self.model}_main`" + " SET `"+ self.station +"` = %s WHERE `serial_num` = %s "
                         cursor.execute(query, (final_status, serial_num))
                         conn.commit()

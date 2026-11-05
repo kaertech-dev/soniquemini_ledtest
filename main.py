@@ -9,7 +9,7 @@ import configparser
 from datetime import datetime
 
 from PyQt6 import uic
-from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox, QTableWidgetItem
+from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox, QTableWidgetItem, QInputDialog, QLineEdit
 from PyQt6.QtGui import QImage, QPixmap, QShortcut, QKeySequence
 from PyQt6.QtCore import QTimer, Qt
 
@@ -25,13 +25,14 @@ def get_path(raw_path):
     return ret
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, version):
         super().__init__()
         uic.loadUi(get_path('layout/main_window.ui'), self)
         kaertech_logo = QImage(get_path(r"static/kaertech_logo.png")).scaled(90, 90, transformMode=Qt.TransformationMode.SmoothTransformation)
         self.logo_left.setPixmap(QPixmap.fromImage(kaertech_logo))
         # ddg_logo = QImage(get_path(r"static/ddg_logo.jpg")).scaledToWidth(160, Qt.TransformationMode.SmoothTransformation)
         # self.logo_right.setPixmap(QPixmap.fromImage(ddg_logo))
+        self.version.setText(version)
 
         self.config = {}
         self.csv_headers = []
@@ -142,17 +143,17 @@ class MainWindow(QMainWindow):
                 self.mode_label.setText('PRODUCTION')
                 self.mode_label.setStyleSheet("background-color: rgb(255, 255, 0);")
 
-            old_cam = self.config['cam_source']
-            old_serial = self.config['hw_port']
-            old_baud = self.config['baud_rate']
-            self.load_config()
-            self.roi_locations = self.load_roi_template()
-            self.test_parameters = self.load_test_params()
-            self.init_test_variables()
-            if self.config['cam_source'] != old_cam:
-                self.camera = Camera(index=self.config['cam_source'])
-            if self.config['hw_port'] != old_serial or self.config['baud_rate'] != old_baud:
-                self.connect_port()
+            # old_cam = self.config['cam_source']
+            # old_serial = self.config['hw_port']
+            # old_baud = self.config['baud_rate']
+            # self.load_config()
+            # self.roi_locations = self.load_roi_template()
+            # self.test_parameters = self.load_test_params()
+            # self.init_test_variables()
+            # if self.config['cam_source'] != old_cam:
+            #     self.camera = Camera(index=self.config['cam_source'])
+            # if self.config['hw_port'] != old_serial or self.config['baud_rate'] != old_baud:
+            #     self.connect_port()
 
     def abort_signal(self):
         self.results_win.abort_test()
@@ -389,32 +390,23 @@ class MainWindow(QMainWindow):
         #     QMessageBox.information(self, 'Info', 'Incorrect serial format', buttons=QMessageBox.StandardButton.Ok)
         #     return False
 
-        po_flag, po_error = self.dbconn.prev_station_ok(self.current_serial)
-        if not po_flag:
-            QMessageBox.warning(self, 'Warning', po_error, buttons=QMessageBox.StandardButton.Ok)
+        db_status = self.dbconn.get_db_status(self.current_serial)
+        if 'error' in db_status:
+            QMessageBox.warning(self, 'Warning', db_status.get('error', ''), buttons=QMessageBox.StandardButton.Ok)
             if self.mode_label.text() == 'PRODUCTION':
                 return False
-        else:
-            self.ponum_display.setText(po_error)
 
-        # Dev Mode
-        if self.mode_label.text() == 'DEVELOPMENT':
-            self.tail_details['test_rep'] = 1
-        # Prod Mode
-        else:
-            test_rep = self.dbconn.check_retest(self.current_serial)
-            if test_rep >= 0 and test_rep < 3:
-                self.tail_details['test_rep'] = test_rep + 1
-            elif test_rep == -1:
-                QMessageBox.warning(self, 'Warning', 'Unit already passed', buttons=QMessageBox.StandardButton.Ok)
-                return False
-            elif test_rep > 2:
-                QMessageBox.warning(self, 'Warning', 'No more retests allowed', buttons=QMessageBox.StandardButton.Ok)
-                return False
-            else:
-                QMessageBox.critical(self, 'Error', test_rep, buttons=QMessageBox.StandardButton.Ok)
-                return False
-            
+        self.ponum_display.setText(db_status.get('po_num', ''))
+        curr_rep = db_status.get('test_rep', 1)
+        self.tail_details['test_rep'] = curr_rep
+
+        # # Dev Mode
+        # if self.mode_label.text() == 'DEVELOPMENT':
+        #     self.tail_details['test_rep'] = 1
+        # # Prod Mode
+        # else:
+        #     self.tail_details['test_rep'] = db_status.get('test_rep', 1)
+        
         self.start_test_button.setEnabled(True)
         return True
 
@@ -543,7 +535,7 @@ if __name__=='__main__':
 
     app = QApplication(sys.argv)
     app.setStyle('windowsvista')
-    window = MainWindow()
+    window = MainWindow('v1.0.1')
     window.show()
 
     # Start the event loop.

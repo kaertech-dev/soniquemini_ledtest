@@ -23,6 +23,7 @@ class Camera:
     def __init__(self, source: int, cam_params: dict):
         try:
             self.cap = cv2.VideoCapture(source, cv2.CAP_DSHOW)
+            self.cam_params = cam_params
             self.exposure = cam_params.get('exposure')
             self.focus = cam_params.get('focus')
             self.zoom = cam_params.get('zoom')
@@ -32,9 +33,9 @@ class Camera:
 
             # self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
             # self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 960)
-            self.cap.set(cv2.CAP_PROP_EXPOSURE, self.exposure)
-            self.cap.set(cv2.CAP_PROP_FOCUS, self.focus)
-            self.cap.set(cv2.CAP_PROP_ZOOM, self.zoom)
+            # self.cap.set(cv2.CAP_PROP_EXPOSURE, self.exposure)
+            # self.cap.set(cv2.CAP_PROP_FOCUS, self.focus)
+            # self.cap.set(cv2.CAP_PROP_ZOOM, self.zoom)
 
             _, frame = self.cap.read()
             # cv2.imshow('testing', frame)
@@ -42,15 +43,26 @@ class Camera:
         except Exception as e:
             # print(e)
             pass
+
+    def get_properties(self):
+        return self.cam_params
     
     def get_image(self):
         try:
             # remove 20 frames from the buffer to get the most recent frame (as possible)
-            for _ in range(20):
-                self.cap.set(cv2.CAP_PROP_EXPOSURE, self.exposure)
-                self.cap.set(cv2.CAP_PROP_FOCUS, self.focus)
-                self.cap.set(cv2.CAP_PROP_ZOOM, self.zoom)
+            self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+            self.cap.set(cv2.CAP_PROP_EXPOSURE, self.exposure)
+            self.cap.set(cv2.CAP_PROP_FOCUS, self.focus)
+            self.cap.set(cv2.CAP_PROP_ZOOM, self.zoom)
+            for _ in range(10):
+                # self.cap.set(cv2.CAP_PROP_EXPOSURE, self.exposure)
+                # self.cap.set(cv2.CAP_PROP_FOCUS, self.focus)
+                # self.cap.set(cv2.CAP_PROP_ZOOM, self.zoom)
                 ret, frame = self.cap.read()
+
+            print('-- exposure', self.cap.get(cv2.CAP_PROP_EXPOSURE))
+            print('-- focus', self.cap.get(cv2.CAP_PROP_FOCUS))
+            print('-- zoom', self.cap.get(cv2.CAP_PROP_ZOOM))
 
             # print(frame.shape)
             self.frame = frame
@@ -71,7 +83,7 @@ class SettingsBox(QDialog):
         self.mode = ''
 
     def launch_debugger(self):
-        roi_debugger = DebugROI()
+        roi_debugger = DebugROI(self.camera.get_properties())
         _, img = self.camera.get_image()
         flag = roi_debugger.setImage(img)
         if not flag:
