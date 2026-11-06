@@ -60,9 +60,9 @@ class Camera:
                 # self.cap.set(cv2.CAP_PROP_ZOOM, self.zoom)
                 ret, frame = self.cap.read()
 
-            print('-- exposure', self.cap.get(cv2.CAP_PROP_EXPOSURE))
-            print('-- focus', self.cap.get(cv2.CAP_PROP_FOCUS))
-            print('-- zoom', self.cap.get(cv2.CAP_PROP_ZOOM))
+            # print('-- exposure', self.cap.get(cv2.CAP_PROP_EXPOSURE))
+            # print('-- focus', self.cap.get(cv2.CAP_PROP_FOCUS))
+            # print('-- zoom', self.cap.get(cv2.CAP_PROP_ZOOM))
 
             # print(frame.shape)
             self.frame = frame

@@ -10,3 +10,4 @@
 | :------: | :----------- |
 | 1.0.0 | first release |
 | 1.0.1 | improved database queries |
+| 1.1.0 | re-added FA password; serial number bugfix; updated limits to 7% |

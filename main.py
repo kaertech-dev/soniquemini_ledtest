@@ -6,6 +6,7 @@ import json
 import time
 import serial
 import configparser
+import subprocess
 from datetime import datetime
 
 from PyQt6 import uic
@@ -51,12 +52,16 @@ class MainWindow(QMainWindow):
         self.test_parameters = self.load_test_params()
         self.camera = Camera(self.config['cam_source'], self.config['cam_params'])
 
+        self.relay_off_cmd = ['daq/TSD_DAQ.exe', '--port', 'D',  '--execute', '0']
+        res = subprocess.run(self.relay_off_cmd)
+        self.relay_on_cmd = ['daq/TSD_DAQ.exe', '--port', 'D',  '--execute', '1']
+
         self.hw_timer = QTimer(self)
         self.hw_timer.timeout.connect(self.update_current)
         self.connect_port()
 
         self.results_win = TestResultsWindow(self.roi_locations, self.test_parameters)
-        self.bar_step = 100 / (len(self.test_parameters)+1 * 3)
+        self.bar_step = 100 / 51
         self.init_test_variables()
         self.start_test_button.setEnabled(False)
 
@@ -112,8 +117,8 @@ class MainWindow(QMainWindow):
             shift = self.shift_input.currentText()
 
             if user and shift:
-                self.login_details['operator_en'] = user.strip()
-                self.login_details['shift'] = shift.strip()
+                self.login_details['operator_en'] = user.strip().upper()
+                self.login_details['shift'] = shift.strip().upper()
                 self.oprtr_en_input.setEnabled(False)
                 self.shift_input.setEnabled(False)
                 self.login_button.setText('LOGOUT')
@@ -305,14 +310,27 @@ class MainWindow(QMainWindow):
         row = (mode*17) - 1
         self.update_test_progress(row, curr_param, high, curr_meas, low, unit, status)
 
+    def __off(self):
+        res = subprocess.run(self.relay_off_cmd)
+
+    def __on(self):
+        res = subprocess.run(self.relay_on_cmd)
+        QTimer.singleShot(100, self.__off)
+
+    def button_click(self):
+        res = subprocess.run(self.relay_off_cmd)
+        # QTimer.singleShot(100, self.__on)
+        res = subprocess.run(self.relay_on_cmd)
+        res = subprocess.run(self.relay_off_cmd)
+
     def mode_test_done(self, mode, status):
         self.messages.setText('Reading current...')
         hw_result = self.read_current()
         self.add_curr_value(mode, hw_result)
 
         if mode == 1:
-            res = QMessageBox.information(self.results_win, 'MODE 1', f"MODE 1 {status}.\nEnable Mode 2 then click 'OK' ", QMessageBox.StandardButton.Ok)
-            # self.results_win.activateWindow()
+            # res = QMessageBox.information(self.results_win, 'MODE 1', f"MODE 1 {status}.\nEnable Mode 2 then click 'OK' ", QMessageBox.StandardButton.Ok)
+            self.button_click()
             success, frame = self.camera.get_image()
             if not success:
                 QMessageBox.critical(self, 'Error', frame, buttons=QMessageBox.StandardButton.Ok)
@@ -320,8 +338,8 @@ class MainWindow(QMainWindow):
             self.results_win.add_image(frame)
             return
         elif mode == 2:
-            res = QMessageBox.information(self.results_win, 'MODE 2', f"MODE 2 {status}.\nEnable Mode 3 then click 'OK' ", QMessageBox.StandardButton.Ok)
-            # self.results_win.activateWindow()
+            # res = QMessageBox.information(self.results_win, 'MODE 2', f"MODE 2 {status}.\nEnable Mode 3 then click 'OK' ", QMessageBox.StandardButton.Ok)
+            self.button_click()
             success, frame = self.camera.get_image()
             if not success:
                 QMessageBox.critical(self, 'Error', frame, buttons=QMessageBox.StandardButton.Ok)
@@ -358,7 +376,7 @@ class MainWindow(QMainWindow):
             if not val:
                 return
 
-        self.head_details['serial_num'] = self.current_serial
+        self.head_details['serial_num'] = self.current_serial.upper()
         self.head_details['po_num'] = self.ponum_display.text()
         self.head_details.update(self.login_details)
         self.enable_buttons(False)
@@ -366,6 +384,7 @@ class MainWindow(QMainWindow):
         self.start_test_time = time.time()
 
         # Capture image from camera
+        self.button_click()
         success, frame = self.camera.get_image()
         if not success:
             QMessageBox.critical(self, 'Error', frame, buttons=QMessageBox.StandardButton.Ok)
@@ -396,12 +415,12 @@ class MainWindow(QMainWindow):
             return False
 
         self.init_test_variables()
-        self.current_serial = self.serialno_display.text().strip().upper()
+        self.current_serial = self.serialno_display.text()
         if not self.current_serial:
             QMessageBox.information(self, 'Info', 'Enter serial number to test', buttons=QMessageBox.StandardButton.Ok)
             self.serialno_display.setFocus()
             return False
-
+        self.current_serial = self.current_serial.upper()
         if not self.hw_serial and self.mode_label == 'PRODUCTION':
             QMessageBox.critical(self, 'Error', 'Power Supply NOT connected', buttons=QMessageBox.StandardButton.Ok)
             return False
@@ -556,7 +575,7 @@ if __name__=='__main__':
 
     app = QApplication(sys.argv)
     app.setStyle('windowsvista')
-    window = MainWindow('v1.0.1')
+    window = MainWindow('v1.1.0')
     window.show()
 
     # Start the event loop.
