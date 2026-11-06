@@ -104,7 +104,7 @@ class SettingsBox(QDialog):
 class TestResultsWindow(QDialog):
     roi_visible = pyqtSignal(bool)
     roi_done_signal = pyqtSignal(int, str, float, float, float, str, str)
-    test_complete_signal = pyqtSignal(int, str, str)
+    test_complete_signal = pyqtSignal(int, str)
 
     def __init__(self, roi_locations: dict, test_parameters: dict):
         super().__init__()
@@ -122,7 +122,7 @@ class TestResultsWindow(QDialog):
         self.mode_status = 'PASS'
         self.test_parameters = test_parameters
         self.final_values = {}
-        self.fail_reasons = []
+        self.fail_reasons = {'LOW':[], 'HIGH':[], 'EXTRA':[], 'NONE':[]}
         self.abort = False
 
         self.scene = QGraphicsScene(0,0,1920,1080)
@@ -156,57 +156,61 @@ class TestResultsWindow(QDialog):
     def check_limits(self, led_name, value, low, high):
         num_match = re.search(r'\d+', led_name)
         if not num_match:
-            return False, ''
+            return ''
         led_num = int(num_match.group(0))
 
         # Mode 1
         # 1-10
         if self.current_mode == 1:
             if led_num <= 10:
-                if value <= low:
-                    return False, 'LOW'
+                if value == -1:
+                    return 'NONE'
+                elif value <= low:
+                    return 'LOW'
                 elif value >= high:
-                    return False, 'HIGH'
+                    return 'HIGH'
                 else:
-                    return True, 'OKAY'
+                    return 'OKAY'
             else:
-                if value < low:
-                    return True, 'N/A'
+                if value == -1:
+                    return 'OKAY'
                 else:
-                    return False, 'STRAY'
+                    return 'EXTRA'
         
         # Mode 2
         # 1-6, 11-16 
         if self.current_mode == 2:
             if (led_num % 10) > 0 and (led_num % 10) <= 6:
-                if value <= low:
-                    return False, 'LOW'
+                if value == -1:
+                    return 'NONE'
+                elif value <= low:
+                    return 'LOW'
                 elif value >= high:
-                    return False, 'HIGH'
+                    return 'HIGH'
                 else:
-                    return True, 'OKAY'
+                    return 'OKAY'
             else:
-                if value < low:
-                    return True, 'N/A'
+                if value == -1:
+                    return 'OKAY'
                 else:
-                    return False, 'STRAY'
+                    return 'EXTRA'
 
         if self.current_mode == 3:
-            if value <= low:
-                return False, 'LOW'
+            if value == -1:
+                return 'NONE'
+            elif value <= low:
+                return 'LOW'
             elif value >= high:
-                return False, 'HIGH'
+                return 'HIGH'
             else:
-                return True, 'OKAY'
+                return 'OKAY'
 
     def update_test(self):
         if self.abort:
             return
         
         if self.index == len(self.roi_list):
-            errors = self.mode_fr[self.current_mode]
-            val = '' if not errors else 'STRAY: ' + ','.join(errors)
-            self.test_complete_signal.emit(self.current_mode, self.mode_status, val)
+            self.test_complete_signal.emit(self.current_mode, self.mode_status)
             self.index = 0
             self.current_mode += 1
 
@@ -225,15 +229,19 @@ class TestResultsWindow(QDialog):
         high = float(limits['high'])
         low = float(limits['low'])
 
-        passed, status = self.check_limits(led_name, value, low, high)
-        if not passed:
+        status = self.check_limits(led_name, value, low, high)
+        if status != 'OKAY':
             self.mode_status = 'FAIL'
-            if status == 'STRAY':
-                # txt = f"{led_name.upper()} {status}-{self.current_mode}"
-                self.mode_fr[self.current_mode].append(led_name.upper())
-            else:
-                txt = f"{led_name.upper()} {status[0]}"
-                self.fail_reasons.append(txt)
+            fr_led = led_name.replace('LED', '')
+            fr_text = f"M{self.current_mode}L{fr_led}"
+            
+            # if status == 'STRAY':
+            #     self.mode_fr[self.current_mode].append(led_name.upper())
+            # else:
+            #     txt = f"{led_name.upper()} {status[0]}"
+            #     self.fail_reasons.append(txt)
+
+            self.fail_reasons[status].append(fr_text)
         # Display the results to the Main Window table
         idx = limits['table_row'] - 1 # led numbers start at 1 instead of 0
         self.roi_done_signal.emit(idx + (self.current_mode-1)*17, f"mode{self.current_mode}_{led_name.upper()}", high, value, low, limits['unit'], status)
@@ -248,7 +256,7 @@ class TestResultsWindow(QDialog):
     def start_test_loop(self):
         # reset to default
         self.final_values = {}
-        self.fail_reasons = []
+        self.fail_reasons = {'LOW':[], 'HIGH':[], 'EXTRA':[], 'NONE':[]}
         self.index = 0
         self.current_mode = 1
         self.mode_status = 'PASS'

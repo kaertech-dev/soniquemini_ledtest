@@ -24,6 +24,14 @@ def get_path(raw_path):
         ret = os.path.join('.', raw_path)
     return ret
 
+from cryptography.fernet import Fernet
+def decrypt(enc_message: str):
+    enc_bytes = enc_message.encode()
+    secret_key = b'wCzGXclj_DVpjx-2WzvTZI2i8chvybK82t-2eFkO8Ag='
+    fernet = Fernet(secret_key)
+    dec_bytes = fernet.decrypt(enc_bytes)
+    return dec_bytes.decode()
+
 class MainWindow(QMainWindow):
     def __init__(self, version):
         super().__init__()
@@ -143,17 +151,17 @@ class MainWindow(QMainWindow):
                 self.mode_label.setText('PRODUCTION')
                 self.mode_label.setStyleSheet("background-color: rgb(255, 255, 0);")
 
-            # old_cam = self.config['cam_source']
-            # old_serial = self.config['hw_port']
-            # old_baud = self.config['baud_rate']
-            # self.load_config()
-            # self.roi_locations = self.load_roi_template()
-            # self.test_parameters = self.load_test_params()
-            # self.init_test_variables()
-            # if self.config['cam_source'] != old_cam:
-            #     self.camera = Camera(index=self.config['cam_source'])
-            # if self.config['hw_port'] != old_serial or self.config['baud_rate'] != old_baud:
-            #     self.connect_port()
+            old_cam = self.config['cam_source']
+            old_serial = self.config['hw_port']
+            old_baud = self.config['baud_rate']
+            self.load_config()
+            self.roi_locations = self.load_roi_template()
+            self.test_parameters = self.load_test_params()
+            self.init_test_variables()
+            if self.config['cam_source'] != old_cam:
+                self.camera = Camera(index=self.config['cam_source'])
+            if self.config['hw_port'] != old_serial or self.config['baud_rate'] != old_baud:
+                self.connect_port()
 
     def abort_signal(self):
         self.results_win.abort_test()
@@ -247,16 +255,29 @@ class MainWindow(QMainWindow):
         self.final_values = self.results_win.final_values
         self.final_values.update(self.curr_values)
         # print(self.final_values)
-        self.fail_reasons = self.results_win.fail_reasons
+        # self.fail_reasons = self.results_win.fail_reasons
+        low_fail = self.results_win.fail_reasons.get('LOW')
+        high_fail = self.results_win.fail_reasons.get('HIGH')
+        extra_fail = self.results_win.fail_reasons.get('EXTRA')
+        none_fail = self.results_win.fail_reasons.get('NONE')
 
-        if len(self.final_values) > 0 and len(self.fail_reasons) == 0:
+        if len(self.final_values) > 0 and len(low_fail + high_fail + extra_fail + none_fail) == 0:
             self.tail_details['status'] = 1
             self.pass_fail_output.setText("PASS")
             self.pass_fail_output.setStyleSheet("background-color: rgb(20, 230, 20);")
         else:
+            full_fr_text = ''
+            if len(low_fail) > 0:
+                full_fr_text += 'LO=' + ','.join(low_fail) + '/'
+            if len(high_fail) > 0:
+                full_fr_text += 'HI=' + ','.join(high_fail) + '/'
+            if len(extra_fail) > 0:
+                full_fr_text += 'EXTRA=' + ','.join(extra_fail) + '/'
+            if len(none_fail) > 0:
+                full_fr_text += 'NONE=' + ','.join(none_fail) + '/'
+
             self.tail_details['status'] = 0
-            fr_raw = 'FAIL: ' + ','.join(self.fail_reasons)
-            self.tail_details['fail_reason'] = fr_raw[:255]
+            self.tail_details['fail_reason'] = full_fr_text[:255]
             self.pass_fail_output.setText("FAIL")
             self.pass_fail_output.setStyleSheet("background-color: rgb(245, 0, 0);")
 
@@ -284,7 +305,7 @@ class MainWindow(QMainWindow):
         row = (mode*17) - 1
         self.update_test_progress(row, curr_param, high, curr_meas, low, unit, status)
 
-    def mode_test_done(self, mode, status, fail_reason):
+    def mode_test_done(self, mode, status):
         self.messages.setText('Reading current...')
         hw_result = self.read_current()
         self.add_curr_value(mode, hw_result)
@@ -375,7 +396,7 @@ class MainWindow(QMainWindow):
             return False
 
         self.init_test_variables()
-        self.current_serial = self.serialno_display.text().strip()
+        self.current_serial = self.serialno_display.text().strip().upper()
         if not self.current_serial:
             QMessageBox.information(self, 'Info', 'Enter serial number to test', buttons=QMessageBox.StandardButton.Ok)
             self.serialno_display.setFocus()
@@ -398,15 +419,15 @@ class MainWindow(QMainWindow):
 
         self.ponum_display.setText(db_status.get('po_num', ''))
         curr_rep = db_status.get('test_rep', 1)
-        self.tail_details['test_rep'] = curr_rep
 
-        # # Dev Mode
-        # if self.mode_label.text() == 'DEVELOPMENT':
-        #     self.tail_details['test_rep'] = 1
-        # # Prod Mode
-        # else:
-        #     self.tail_details['test_rep'] = db_status.get('test_rep', 1)
+        if db_status.get('need_pass', False):
+            text, ok = QInputDialog.getText(self, 'Retest authorization', 'Password:', QLineEdit.EchoMode.Password)
+            if ok and text == decrypt(self.config['fa_password']):
+                pass
+            else:
+                return False
         
+        self.tail_details['test_rep'] = curr_rep
         self.start_test_button.setEnabled(True)
         return True
 

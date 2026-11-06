@@ -182,15 +182,18 @@ class DatabaseConn:
                         self.previous_stations = [col['Field'] for col in results]
                         print(self.previous_stations)
 
-                    curr_test_rep = -1
+                    curr_test_rep = 0
                     failed_stations = []
                     for column in self.previous_stations:
                         if column == 'serial_num' or column == 'po_num':
                             continue
                         elif column == self.station:
-                            retest_query = " SELECT `test_rep` FROM " + self.table_name + " WHERE `serial_num` LIKE %s ORDER BY `test_rep` DESC"
+                            retest_query = " SELECT `test_rep`, `status` FROM " + self.table_name + " WHERE `serial_num` LIKE %s ORDER BY `test_rep` DESC"
                             cursor.execute(retest_query, (f'{serial_num}%',))
-                            curr_test_rep = len(cursor.fetchall()) + 1
+                            response = cursor.fetchall()
+                            curr_test_rep = len(response) + 1
+                            if len(response) > 0 and response[0]['status'] == 1:
+                                return {'error': "Already passed"}
                             break
                         else:
                             table_name = f"`{self.model}_{column}`"
@@ -209,6 +212,8 @@ class DatabaseConn:
                         resp = cursor.fetchone()
                         if not resp or resp['farepair_status'] != 4:
                             return {'error': "No more retests allowed until FA"}
+                        else:
+                            return {'po_num': ponum, 'test_rep': curr_test_rep, 'need_pass': True}
                     
                     return {'po_num': ponum, 'test_rep': curr_test_rep}
 
