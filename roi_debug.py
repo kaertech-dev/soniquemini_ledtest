@@ -74,48 +74,41 @@ class RoiItem(QGraphicsRectItem):
 class VideoThread(QThread):
     change_pixmap_signal = pyqtSignal(np.ndarray)
 
-    def __init__(self, source):
+    def __init__(self, cam_object, cam_params: dict):
         super().__init__()
-        self._run_flag = True
-        self.source = source
+        self.cam_object = cam_object
+        self.cam_params = cam_params
 
-        self.cap = cv2.VideoCapture(self.source, cv2.CAP_DSHOW)
-        # self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        # self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 960)
+        exp  = cam_params.get('exposure')
+        foc = cam_params.get('focus')
+        zoom = cam_params.get('zoom')
+        self.set_cam_prop(exp, foc, zoom)
 
     def read_cam_prop(self):
-        br = self.cap.get(cv2.CAP_PROP_BRIGHTNESS)
-        con = self.cap.get(cv2.CAP_PROP_CONTRAST)
-        exp = self.cap.get(cv2.CAP_PROP_EXPOSURE)
-        zoom = self.cap.get(cv2.CAP_PROP_ZOOM)
-        foc = self.cap.get(cv2.CAP_PROP_FOCUS)
+        # br = self.cap.get(cv2.CAP_PROP_BRIGHTNESS)
+        # con = self.cap.get(cv2.CAP_PROP_CONTRAST)
+        exp = self.cam_object.cap.get(cv2.CAP_PROP_EXPOSURE)
+        zoom = self.cam_object.cap.get(cv2.CAP_PROP_ZOOM)
+        foc = self.cam_object.cap.get(cv2.CAP_PROP_FOCUS)
 
-        print('values', br, con, exp, foc, zoom)
-        return br, con, exp, foc, zoom
+        print('values', exp, foc, zoom)
+        return exp, foc, zoom
 
-    def set_cam_prop(self, br=128.0, con=128.0, exp=-5, foc=1, zoom=100):
-        self.brightness = br
+    def set_cam_prop(self, exp=-5, foc=1, zoom=100):
         self.cam_exposure = exp
-        self.contrast = con
         self.focus = foc
         self.zoom = zoom
         # print('before', br, con, exp, foc, zoom)
 
-    def grab_frame(self):
-        ret, frame = self.cap.read()
-        return frame
-
     def run(self):
-        br, con, exp, foc, zoom = self.read_cam_prop()
-        self.set_cam_prop(br, con, exp, foc, zoom)
+        self.cam_object.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.cam_params.get('width', 640))
+        self.cam_object.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.cam_params.get('height', 480))
 
-        while self._run_flag:
-            self.cap.set(cv2.CAP_PROP_BRIGHTNESS, self.brightness)
-            self.cap.set(cv2.CAP_PROP_CONTRAST, self.contrast)
-            self.cap.set(cv2.CAP_PROP_EXPOSURE, self.cam_exposure)
-            self.cap.set(cv2.CAP_PROP_FOCUS, self.focus)
-            self.cap.set(cv2.CAP_PROP_ZOOM, self.zoom)
-            ret, frame = self.cap.read()
+        while True:
+            self.cam_object.cap.set(cv2.CAP_PROP_EXPOSURE, self.cam_exposure)
+            self.cam_object.cap.set(cv2.CAP_PROP_FOCUS, self.focus)
+            self.cam_object.cap.set(cv2.CAP_PROP_ZOOM, self.zoom)
+            ret, frame = self.cam_object.cap.read()
             # if ret:
             #     adjusted = cv2.convertScaleAbs(frame, alpha=self.contrast, beta=self.brightness)
                 # cv2.imwrite('image.jpg', adjusted)
@@ -123,135 +116,28 @@ class VideoThread(QThread):
                 self.change_pixmap_signal.emit(frame)
         # self.cap.release()
 
-    def stop(self):
-        self._run_flag = False
-        self.wait()
-
-class ImageEditor(QDialog):
-    def __init__(self, cam_src:int = 1):
-        super().__init__()
-        uic.loadUi(get_path('layout/image_editor.ui'), self)
-
-        self.scene = QGraphicsScene(0,0,1920,1080)
-        self.graphicsView.setScene(self.scene)
-        rect = self.scene.sceneRect()
-        self.graphicsView.fitInView(rect, Qt.AspectRatioMode.KeepAspectRatio)
-
-        self.pixmapItem = QGraphicsPixmapItem()
-        self.scene.addItem(self.pixmapItem)
-
-        self.vthread = VideoThread(cam_src)
-        # self.vthread.change_pixmap_signal.connect(self.update_image)
-        br, con, exp, foc, zoom = self.vthread.read_cam_prop()
-        self.camera_config = {'brightness': br, 'contrast': con, 'exposure': exp, 'focus': foc, 'zoom': zoom}
-        self.init_spin_box(br, con, exp, foc, zoom)
-        self.raw_image = None
-        self.final_pixmap = None
-
-        # self.open_file_button.clicked.connect(self.open_file_dialog)
-        # self.open_cam_button.clicked.connect(self.open_camera)
-        self.overlay_button.clicked.connect(self.importTable)
-        self.save_exit_button.clicked.connect(self.save_and_exit)
-
-        self.brightness_input.valueChanged.connect(self.update_img_params)
-        self.contrast_input.valueChanged.connect(self.update_img_params)
-        self.exposure_input.valueChanged.connect(self.update_img_params)
-        self.focus_input.valueChanged.connect(self.update_img_params)
-        self.zoom_input.valueChanged.connect(self.update_img_params)
-
-    def init_spin_box(self, br, con, ex, foc, zm):
-        if br:
-            self.brightness_input.setValue(int(br))
-        if con:
-            self.contrast_input.setValue(int(con))
-        if ex:
-            self.exposure_input.setValue(int(ex))
-        if foc:
-            self.focus_input.setValue(int(foc))
-        if zm:
-            self.zoom_input.setValue(int(zm))
-
-    def update_image(self, cv_img):
-        self.raw_image = cv_img
-        h, w, ch = cv_img.shape
-        bytes_per_line = ch * w
-        qt_img = QImage(cv_img.data, w, h, bytes_per_line, QImage.Format.Format_BGR888)
-        self.pixmapItem.setPixmap(QPixmap.fromImage(qt_img))
-        # self.scene.setSceneRect(0,0,w,h)
-        rect = self.scene.itemsBoundingRect()
-        self.graphicsView.fitInView(rect, Qt.AspectRatioMode.KeepAspectRatio)
-
-    def update_img_params(self, value):
-        br = self.brightness_input.value()
-        con = self.contrast_input.value()
-        exp = self.exposure_input.value()
-        foc = self.focus_input.value()
-        zm = self.zoom_input.value()
-        
-        self.camera_config = {'brightness': br, 'contrast': con, 'exposure': exp, 'focus': foc, 'zoom': zm}
-        self.vthread.set_cam_prop(br, con, exp, foc, zm)
-
-    def save_and_exit(self):
-        self.final_pixmap = self.pixmapItem.pixmap()
-        cv2.imwrite('test.jpg', self.raw_image)
-        self.close()
-
-    def showEvent(self, event):
-        if not self.vthread.isRunning():
-            self.vthread.start()
-        self.vthread.change_pixmap_signal.connect(self.update_image)
-        event.accept()
-
-    def closeEvent(self, event):
-        # self.vthread.stop()
-        self.vthread.change_pixmap_signal.disconnect(self.update_image)
-        event.ignore()
-        self.hide()
-
-    def importTable(self):
-        children = self.pixmapItem.childItems()
-        for child in children:
-            child.deleteLater()
-        
-        file, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select File",
-            r"C:\\Users\\ai\\roi_config",
-            "Text (*.txt);; CSV (*.csv)"
-            )
-        if file:
-            file_source = str(Path(file))
-            # raw_image = cv2.imread(file)
-            raww = self.raw_image.copy()
-            roi_list = {}
-            with open(file_source, 'r') as old_roi:
-                old_roi.readline() # skip header
-                for line in old_roi:
-                    name, x, y, width, height = line.split(',')
-                    roi_list[name] = (int(x), int(y), int(width), int(height))
-                    # if self._img_source != 'cam':
-                    pt1 = (int(x), int(y))
-                    pt2 = (int(x) + int(width), int(y) + int(height))
-                    # cv2.rectangle(raww, pt1, pt2, (0,255,255), 2)
-                    # number = name.split('LED')[-1]
-                    # if int(number) > 40:
-                    #     number = 'R' + str(int(number)-40)
-                    # else:
-                    #     number = 'L' + number
-                    # cv2.putText(raww, number, pt1, cv2.FONT_HERSHEY_COMPLEX, 1, (0,255,255), 1)
-                    new_roi = RoiItem(0, 0, int(width), int(height), self.pixmapItem)
-                    new_roi.setPos(float(x), float(y))
-
-            # cv2.imwrite('roi_loc.jpg', raww)
+    # def stop(self):
+    #     self._run_flag = False
+    #     self.wait()
 
 class DebugROI(QDialog):
-    def __init__(self, cam_params: dict):
+    new_cam_params = pyqtSignal(dict)
+    def __init__(self, cam_object: cv2.VideoCapture, cam_params: dict):
         super().__init__()
         uic.loadUi(get_path('layout/debug_roi_compact.ui'), self)
         self.roi_size_default = 120
         self.roi_list: list[RoiItem] = []
 
-        self.scene = QGraphicsScene(0,0,1920,1080)
+        self.cam_params = cam_params
+        self.orig_params = cam_params.copy()
+        self.camera = cam_object
+        width, height = self.init_spin_box(cam_params)
+
+        self.exposure_input.valueChanged.connect(self.update_img_params)
+        self.focus_input.valueChanged.connect(self.update_img_params)
+        self.zoom_input.valueChanged.connect(self.update_img_params)
+
+        self.scene = QGraphicsScene(0, 0, width, height)
         self.graphicsView.setScene(self.scene)
         rect = self.scene.sceneRect()
         self.graphicsView.fitInView(rect, Qt.AspectRatioMode.KeepAspectRatio)
@@ -263,72 +149,69 @@ class DebugROI(QDialog):
         self.raw_image = None
         self.scene.addItem(self.pixmapItem)
 
+        self.vthread = VideoThread(cam_object, cam_params)
+
         self.tableModel = QStandardItemModel()
         self.tableModel.setHorizontalHeaderItem(0, QStandardItem('Name'))
         self.tableModel.setHorizontalHeaderItem(1, QStandardItem('Coordinates'))
         self.tableModel.setHorizontalHeaderItem(2, QStandardItem('Size (w x h)'))
         self.tableView.setModel(self.tableModel)
 
-        self.imgReso_text.setText(f"1920x1080")
+        # self.imgReso_text.setText(f"1920x1080")
         self.orig_source = ''
-
-        self.loadImage_button.clicked.connect(self.launch_img_editor)
-        # self.clearViewer_button.clicked.connect(self.clear_graphicsscene)
 
         self.addRoi_button.clicked.connect(self.addRoiItem)
         self.roiName_input.returnPressed.connect(self.setRoiName)
-        # self.deleteRoi_button.clicked.connect(self.deleteRoiItem)
-        # self.addEntry_button.clicked.connect(self.enterRoi)
-        self.removeEntry_button.clicked.connect(self.removeRoi)
-        # self.clearList_button.clicked.connect(self.clearTable)
         self.exportList_button.clicked.connect(self.exportTable)
+        self.removeEntry_button.clicked.connect(self.removeRoi)
+        self.removeEntry_button.setEnabled(False)
 
         self.zoomCtrl_slider.valueChanged.connect(self.updateZoom)
         self.resetZoom_button.clicked.connect(self.resetZoom)
 
         self.roiWidth.valueChanged.connect(self.updateWidth)
         self.roiHeight.valueChanged.connect(self.updateHeight)
-
-        # self.deleteRoi_button.setEnabled(False)
-        # self.addEntry_button.setEnabled(False)
-        self.removeEntry_button.setEnabled(False)
-
-        # self.pixmapItem.setPixmap(QPixmap(r"C:\Users\ai\led_detection\input_images\2026-08-07\112502_KLLM52830017.jpg"))
-        self.img_editor = ImageEditor()
-        self.camera_config = cam_params
+        self.squareMode.checkStateChanged.connect(self.on_square)
+        self.squareMode.setChecked(True)
 
     def showEvent(self, event):
         event.accept()
-        self.resetZoom()
+        if not self.vthread.isRunning():
+            self.vthread.start()
+        self.vthread.change_pixmap_signal.connect(self.update_scene)
+        self.vthread.finished.connect(self.vthread.deleteLater)
+        self.vthread.destroyed.connect(lambda: print("QThread instance was destroyed."))
+        # self.resetZoom()
 
-    def setImage(self, cv_img):
-        if cv_img is not None:
+    def init_spin_box(self, config: dict):
+        width = config.get('width', 0)
+        height = config.get('height', 0)
+        self.imgReso_text.setText(f"{width}x{height}")
+        self.exposure_input.setValue(config.get('exposure', -5))
+        self.focus_input.setValue(config.get('focus', 0))
+        self.zoom_input.setValue(config.get('zoom', 100))
+        return width, height
+
+    def update_img_params(self):
+        exp = self.exposure_input.value()
+        foc = self.focus_input.value()
+        zm = self.zoom_input.value()
+        
+        self.cam_params.update({'exposure': exp, 'focus': foc, 'zoom': zm})
+        self.vthread.set_cam_prop(exp, foc, zm)
+
+    def update_scene(self, cv_img):
+        self.raw_image = cv_img
+        try:
             h, w, ch = cv_img.shape
             bytes_per_line = ch * w
             qt_img = QImage(cv_img.data, w, h, bytes_per_line, QImage.Format.Format_BGR888)
             self.pixmapItem.setPixmap(QPixmap.fromImage(qt_img))
+            # self.scene.setSceneRect(0,0,w,h)
             rect = self.scene.itemsBoundingRect()
             self.graphicsView.fitInView(rect, Qt.AspectRatioMode.KeepAspectRatio)
-            return True
-        else:
-            return False
-
-    def launch_img_editor(self):
-        ex = self.camera_config.get('exposure')
-        focus = self.camera_config.get('focus')
-        zoom = self.camera_config.get('zoom')
-        self.img_editor.init_spin_box(None, None, ex, focus, zoom)
-        self.img_editor.exec()
-
-        self.camera_config = self.img_editor.camera_config
-        pixmap_output = self.img_editor.final_pixmap
-        if pixmap_output is not None:
-            self.pixmapItem.setPixmap(pixmap_output)
-            self.raw_image = self.img_editor.raw_image
-            h, w, ch = self.raw_image.shape
-            self.scene.setSceneRect(0,0,w,h)
-            rect = self.scene.itemsBoundingRect()
-            self.graphicsView.fitInView(rect, Qt.AspectRatioMode.KeepAspectRatio)
+        except:
+            pass
     
     def update_entry(self, roi_item: RoiItem):
         name = self.roiName_input.text()
@@ -543,6 +426,8 @@ class DebugROI(QDialog):
         if not selected:
             return
         roi_item = selected[0]
+        if self.squareMode.isChecked():
+            self.roiHeight.setValue(value)
         roi_item.resizeWidth(value)
         self.update_entry(roi_item)
 
@@ -554,9 +439,19 @@ class DebugROI(QDialog):
         roi_item.resizeHeight(value)
         self.update_entry(roi_item)
 
-    def closeEvent(self, a0):
-        self.img_editor.destroy()
-        return super().closeEvent(a0)
+    def on_square(self, state):
+        if self.squareMode.isChecked():
+            self.roiWidth.valueChanged.connect(self.updateHeight)
+            self.roiHeight.setEnabled(False)
+        else:
+            self.roiWidth.valueChanged.disconnect(self.updateHeight)
+            self.roiHeight.setEnabled(True)
+
+    def closeEvent(self, event):
+        if self.cam_params != self.orig_params:
+            self.new_cam_params.emit(self.cam_params)
+        self.vthread.quit()
+        event.accept()
 
 # def helper():
 #     with open('template_coordinates_old2.csv', 'r') as file:

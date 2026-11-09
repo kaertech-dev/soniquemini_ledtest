@@ -7,21 +7,20 @@ DB_USER = os.getenv('DB_USER', 'labeling')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'labeling')
 
 class DatabaseConn:
-    def __init__(self, db_host, schema: str, model: str, station: str):
+    def __init__(self, input_config: dict):
         self.config = {
-                        'host': db_host,
+                        'host': input_config.get('host'),
                         'user': DB_USER,
                         'password': DB_PASSWORD,
                         'autocommit': False,
                         'use_unicode': True,
                         'charset': 'utf8mb4'
                     }
-        self.schema = schema
-        self.model = model
-        self.station = station
+        self.schema = input_config.get('customer')
+        self.model = input_config.get('model')
+        self.station = input_config.get('station')
         self.previous_stations = []
-        self.table_name = f"`{model}_{station}`"
-        self.csv_headers = []
+        self.table_name = f"`{self.model}_{self.station}`"
 
     def connect(self, schema: str):
         """Create database connection"""
@@ -193,7 +192,7 @@ class DatabaseConn:
                             response = cursor.fetchall()
                             curr_test_rep = len(response) + 1
                             if len(response) > 0 and response[0]['status'] == 1:
-                                return {'error': "Already passed"}
+                                return {'error': "Already passed", 'po_num': ponum, 'test_rep': curr_test_rep}
                             break
                         else:
                             table_name = f"`{self.model}_{column}`"

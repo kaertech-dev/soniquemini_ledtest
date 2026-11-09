@@ -5,9 +5,10 @@
 4. Start the test.
 5. Press the button again when prompted to enable Mode 2. Repeat for Mode 3.
 
-### Changelogs
-| Version | Description |
+### Version History
+| Version | Changes |
 | :------: | :----------- |
-| 1.0.0 | first release |
-| 1.0.1 | improved database queries |
-| 1.1.0 | re-added FA password; serial number bugfix; updated limits to 7% |
+| 1.0.0 | Initial deployment |
+| 1.0.1 | Improved database queries |
+| 1.1.0 | <ul><li>Re-added FA password</li> <li>Serial_num and Oprtr_en all caps</li></ul> |
+| 1.2.0 | <ul><li>Centralized camera control using Singleton</li> <li>ROI debugger now working</li> <li>Placed login inside Settings</li></ul> | 

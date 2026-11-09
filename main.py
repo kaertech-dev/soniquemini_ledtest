@@ -8,6 +8,7 @@ import serial
 import configparser
 import subprocess
 from datetime import datetime
+from pathlib import Path
 
 from PyQt6 import uic
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox, QTableWidgetItem, QInputDialog, QLineEdit
@@ -16,6 +17,10 @@ from PyQt6.QtCore import QTimer, Qt
 
 from helper_classes import SettingsBox, TestResultsWindow, Camera
 from database import DatabaseConn
+
+Q_OK = QMessageBox.StandardButton.Ok
+Q_YES = QMessageBox.StandardButton.Yes
+Q_NO = QMessageBox.StandardButton.No
 
 # logger = logging.getLogger(__name__)
 def get_path(raw_path):
@@ -45,12 +50,12 @@ class MainWindow(QMainWindow):
 
         self.config = {}
         self.csv_headers = []
-        self.login_details = {'operator_en': '', 'shift': 'DEV_MODE'}
+        # self.login_details = {'operator_en': '', 'shift': 'DEV_MODE'}
 
         self.load_config()
         self.roi_locations = self.load_roi_template()
         self.test_parameters = self.load_test_params()
-        self.camera = Camera(self.config['cam_source'], self.config['cam_params'])
+        self.camera = Camera(self.config['cam_params'])
 
         self.relay_off_cmd = ['daq/TSD_DAQ.exe', '--port', 'D',  '--execute', '0']
         res = subprocess.run(self.relay_off_cmd)
@@ -77,9 +82,10 @@ class MainWindow(QMainWindow):
         # timer.start(1000)
 
         # Connect button click signal to slot
-        self.login_button.clicked.connect(self.login)
+        # self.login_button.clicked.connect(self.login)
         self.start_test_button.clicked.connect(self.start_test)
         self.serialno_display.returnPressed.connect(self.validate_serial)
+        self.serialno_display.textChanged.connect(self.reinit)
         self.settings_button.clicked.connect(self.open_settings)
         self.abort_button.clicked.connect(self.abort_signal)
         # self.exit_button.clicked.connect(self.close)
@@ -98,6 +104,12 @@ class MainWindow(QMainWindow):
         # if now.time().strftime(r'%I:%M:%S') == '07:00:00':
         #     self.is_golden_tested = False
     
+    def reinit(self, new_text):
+        if new_text == '':
+            self.init_test_variables()
+            self.start_test_button.setEnabled(False)
+            self.abort_button.setEnabled(False)
+    
     def initialize_shortcuts(self):
         SC_start_test = QShortcut(QKeySequence("F12"), self)
         SC_start_test.activated.connect(self.start_test)
@@ -111,62 +123,77 @@ class MainWindow(QMainWindow):
         SC_exit_app = QShortcut(QKeySequence("End"), self)
         SC_exit_app.activated.connect(self.close)
 
-    def login(self):
-        if self.login_button.text() == 'LOGIN':
-            user = self.oprtr_en_input.text()
-            shift = self.shift_input.currentText()
+    # def login(self):
+    #     if self.login_button.text() == 'LOGIN':
+    #         user = self.oprtr_en_input.text()
+    #         shift = self.shift_input.currentText()
 
-            if user and shift:
-                self.login_details['operator_en'] = user.strip().upper()
-                self.login_details['shift'] = shift.strip().upper()
-                self.oprtr_en_input.setEnabled(False)
-                self.shift_input.setEnabled(False)
-                self.login_button.setText('LOGOUT')
-            else:
-                QMessageBox.information(self, 'Info', 'Please enter all details', buttons=QMessageBox.StandardButton.Ok)
-        else:
-            self.login_details['operator_en'] = 'DEV_MODE'
-            self.login_details['shift'] = ''
-            self.oprtr_en_input.setEnabled(True)
-            self.shift_input.setEnabled(True)
-            self.login_button.setText('LOGIN')
+    #         if user and shift:
+    #             self.login_details['operator_en'] = user.strip().upper()
+    #             self.login_details['shift'] = shift.strip().upper()
+    #             self.oprtr_en_input.setEnabled(False)
+    #             self.shift_input.setEnabled(False)
+    #             self.login_button.setText('LOGOUT')
+    #         else:
+    #             QMessageBox.information(self, 'Info', 'Please enter all details', buttons=QMessageBox.StandardButton.Ok)
+    #     else:
+    #         self.login_details['operator_en'] = 'DEV_MODE'
+    #         self.login_details['shift'] = ''
+    #         self.oprtr_en_input.setEnabled(True)
+    #         self.shift_input.setEnabled(True)
+    #         self.login_button.setText('LOGIN')
 
     def connect_port(self):
         try:
             self.hw_serial = serial.Serial(port = self.config['hw_port'], baudrate = int(self.config['baud_rate']))
             self.hw_serial.reset_input_buffer()
             self.hw_serial.reset_output_buffer()
+            self.hw_serial.write(b'VSET2:5\r\n')
+            self.hw_serial.write(b'ISET2:0.5\r\n')
             self.hw_serial.write(b'OUT1\r\n')
             self.hw_serial.flush()
             self.hw_timer.start(1000)
         except Exception as e:
-            print(e)
+            QMessageBox.warning(self, 'Error', str(e), Q_OK)
             self.hw_serial = None
             self.opcurr_display.setText("PS Not Connected")
     
     def open_settings(self):
-        mode_box = SettingsBox(self.config['template_path'], self.camera)
+        mode_box = SettingsBox(self, self.config['template_path'], self.camera)
         result = mode_box.exec()
 
         if result:
-            if mode_box.mode == 'DEVELOPMENT':
+            self.oprtr_display.setText(mode_box.output['operator_en'])
+            self.shift_display.setText(mode_box.output['shift'])
+            # self.mode_label.setText(mode)
+            if mode_box.output['mode'] == 'DEVELOPMENT':
                 self.mode_label.setText('DEVELOPMENT')
                 self.mode_label.setStyleSheet("background-color: rgb(170, 255, 255);")
             else:
                 self.mode_label.setText('PRODUCTION')
                 self.mode_label.setStyleSheet("background-color: rgb(255, 255, 0);")
+        else:
 
-            old_cam = self.config['cam_source']
-            old_serial = self.config['hw_port']
-            old_baud = self.config['baud_rate']
+            # old_cam = self.config['cam_source']
+            # old_serial = self.config['hw_port']
+            # old_baud = self.config['baud_rate']
             self.load_config()
             self.roi_locations = self.load_roi_template()
             self.test_parameters = self.load_test_params()
             self.init_test_variables()
-            if self.config['cam_source'] != old_cam:
-                self.camera = Camera(index=self.config['cam_source'])
-            if self.config['hw_port'] != old_serial or self.config['baud_rate'] != old_baud:
-                self.connect_port()
+            # if self.config['cam_source'] != old_cam:
+            #     self.camera = Camera(index=self.config['cam_source'])
+            # if self.config['hw_port'] != old_serial or self.config['baud_rate'] != old_baud:
+            #     self.connect_port()
+    
+    def set_login(self, oprtr_en, shift, mode):
+        self.oprtr_display.setText(oprtr_en)
+        self.shift_display.setText(shift)
+        self.mode_label.setText(mode)
+        if mode == 'DEVELOPMENT':
+            self.mode_label.setStyleSheet("background-color: rgb(170, 255, 255);")
+        else:
+            self.mode_label.setStyleSheet("background-color: rgb(255, 255, 0);")
 
     def abort_signal(self):
         self.results_win.abort_test()
@@ -200,6 +227,7 @@ class MainWindow(QMainWindow):
         self.ponum_display.setText('')
         self.serialno_display.setText('')
         self.serialno_display.setFocus()
+        self.serialno_display.textChanged.connect(self.reinit)
 
     def upload_results(self):
         # if self.mode_label.text() == 'DEVELOPMENT':
@@ -310,13 +338,6 @@ class MainWindow(QMainWindow):
         row = (mode*17) - 1
         self.update_test_progress(row, curr_param, high, curr_meas, low, unit, status)
 
-    def __off(self):
-        res = subprocess.run(self.relay_off_cmd)
-
-    def __on(self):
-        res = subprocess.run(self.relay_on_cmd)
-        QTimer.singleShot(100, self.__off)
-
     def button_click(self):
         res = subprocess.run(self.relay_off_cmd)
         # QTimer.singleShot(100, self.__on)
@@ -324,30 +345,33 @@ class MainWindow(QMainWindow):
         res = subprocess.run(self.relay_off_cmd)
 
     def mode_test_done(self, mode, status):
-        self.messages.setText('Reading current...')
-        hw_result = self.read_current()
-        self.add_curr_value(mode, hw_result)
+        try:
+            self.messages.setText('Reading current...')
+            hw_result = self.read_current()
+            self.add_curr_value(mode, hw_result)
 
-        if mode == 1:
-            # res = QMessageBox.information(self.results_win, 'MODE 1', f"MODE 1 {status}.\nEnable Mode 2 then click 'OK' ", QMessageBox.StandardButton.Ok)
-            self.button_click()
-            success, frame = self.camera.get_image()
-            if not success:
-                QMessageBox.critical(self, 'Error', frame, buttons=QMessageBox.StandardButton.Ok)
+            if mode == 1:
+                res = QMessageBox.information(self.results_win, 'MODE 1', f"MODE 1 {status}.\nEnable Mode 2 then click 'OK' ", QMessageBox.StandardButton.Ok)
+                # self.button_click()
+                success, frame = self.camera.capture_frame()
+                if not success:
+                    QMessageBox.critical(self, 'Error', frame, buttons=QMessageBox.StandardButton.Ok)
+                    return
+                self.results_win.add_image(frame)
                 return
-            self.results_win.add_image(frame)
-            return
-        elif mode == 2:
-            # res = QMessageBox.information(self.results_win, 'MODE 2', f"MODE 2 {status}.\nEnable Mode 3 then click 'OK' ", QMessageBox.StandardButton.Ok)
-            self.button_click()
-            success, frame = self.camera.get_image()
-            if not success:
-                QMessageBox.critical(self, 'Error', frame, buttons=QMessageBox.StandardButton.Ok)
+            elif mode == 2:
+                res = QMessageBox.information(self.results_win, 'MODE 2', f"MODE 2 {status}.\nEnable Mode 3 then click 'OK' ", QMessageBox.StandardButton.Ok)
+                # self.button_click()
+                success, frame = self.camera.capture_frame()
+                if not success:
+                    QMessageBox.critical(self, 'Error', frame, buttons=QMessageBox.StandardButton.Ok)
+                    return
+                self.results_win.add_image(frame)
                 return
-            self.results_win.add_image(frame)
-            return
-        else:
-            QTimer.singleShot(10, self.process_values)
+            else:
+                QTimer.singleShot(10, self.process_values)
+        except Exception as e:
+            QMessageBox.warning(self, 'Error', str(e), Q_OK)
 
     def update_test_progress(self, row, param_name, high, value, low, unit, status):
         self.tableWidget.setItem(row, 0, QTableWidgetItem(param_name))
@@ -368,87 +392,101 @@ class MainWindow(QMainWindow):
         # self.tableWidget.setItem(row, 5, QTableWidgetItem(status))
 
         self.progress_percent += self.bar_step
-        self.test_progress.setValue(int(self.progress_percent))
+        # print(self.progress_percent)
+        self.test_progress.setValue(int(round(self.progress_percent, 0)))
 
     def start_test(self):
-        if self.current_serial == '':
-            val = self.validate_serial()
-            if not val:
+        try:
+            self.serialno_display.textChanged.disconnect(self.reinit)
+            if self.current_serial == '':
+                val = self.validate_serial()
+                if not val:
+                    return
+
+            self.head_details['serial_num'] = self.current_serial.upper()
+            self.head_details['po_num'] = self.ponum_display.text()
+            # self.head_details.update(self.login_details)
+            self.head_details['operator_en'] = self.oprtr_display.text()
+            self.head_details['shift'] = self.shift_display.text()
+            self.enable_buttons(False)
+            self.messages.setText("Test in progress")
+            self.start_test_time = time.time()
+
+            # Capture image from camera
+            # self.button_click()
+            success, frame = self.camera.capture_frame()
+            if not success:
+                QMessageBox.critical(self, 'Error', frame, buttons=QMessageBox.StandardButton.Ok)
                 return
 
-        self.head_details['serial_num'] = self.current_serial.upper()
-        self.head_details['po_num'] = self.ponum_display.text()
-        self.head_details.update(self.login_details)
-        self.enable_buttons(False)
-        self.messages.setText("Test in progress")
-        self.start_test_time = time.time()
+            if not self.results_win.isVisible():
+                self.results_win.show()
+            success = self.results_win.add_image(frame)
+            if not success:
+                return
+            
+            self.results_win.activateWindow()
 
-        # Capture image from camera
-        self.button_click()
-        success, frame = self.camera.get_image()
-        if not success:
-            QMessageBox.critical(self, 'Error', frame, buttons=QMessageBox.StandardButton.Ok)
-            return
+            try:
+                if not self.hw_serial.is_open:
+                    self.hw_serial.open()
+            except:
+                pass
 
-        if not self.results_win.isVisible():
-            self.results_win.show()
-        success = self.results_win.add_image(frame)
-        if not success:
-            return
-        
-        self.results_win.activateWindow()
-
-        try:
-            if not self.hw_serial.is_open:
-                self.hw_serial.open()
-        except:
-            pass
-
-        now = datetime.now()
-        self.head_details['date_time'] = now.strftime(r"%Y-%m-%d %H:%M:%S")
-        self.results_win.start_test_loop()
+            now = datetime.now()
+            self.head_details['date_time'] = now.strftime(r"%Y-%m-%d %H:%M:%S")
+            self.results_win.start_test_loop()
+        except Exception as e:
+            QMessageBox.warning(self, 'Error', str(e), Q_OK)
     
     def validate_serial(self):
-        if self.login_button.text() == 'Login':
-            QMessageBox.information(self, 'Info', 'Please login to start testing', buttons=QMessageBox.StandardButton.Ok)
-            self.oprtr_en_input.setFocus()
-            return False
-
-        self.init_test_variables()
-        self.current_serial = self.serialno_display.text()
-        if not self.current_serial:
-            QMessageBox.information(self, 'Info', 'Enter serial number to test', buttons=QMessageBox.StandardButton.Ok)
-            self.serialno_display.setFocus()
-            return False
-        self.current_serial = self.current_serial.upper()
-        if not self.hw_serial and self.mode_label == 'PRODUCTION':
-            QMessageBox.critical(self, 'Error', 'Power Supply NOT connected', buttons=QMessageBox.StandardButton.Ok)
-            return False
-
-        # regex = re.fullmatch(r"K/d{11}", self.current_serial)
-        # if self.mode_label.text() == 'PRODUCTION' and not regex:
-        #     QMessageBox.information(self, 'Info', 'Incorrect serial format', buttons=QMessageBox.StandardButton.Ok)
-        #     return False
-
-        db_status = self.dbconn.get_db_status(self.current_serial)
-        if 'error' in db_status:
-            QMessageBox.warning(self, 'Warning', db_status.get('error', ''), buttons=QMessageBox.StandardButton.Ok)
-            if self.mode_label.text() == 'PRODUCTION':
+        try:
+            user = self.oprtr_display.text()
+            shift = self.shift_display.text()
+            if not (user and shift):
+                # if self.mode_label.text() == 'PRODUCTION':
+                QMessageBox.information(self, 'Info', 'Please login to start testing', buttons=QMessageBox.StandardButton.Ok)
+                QTimer.singleShot(10, self.open_settings)
                 return False
 
-        self.ponum_display.setText(db_status.get('po_num', ''))
-        curr_rep = db_status.get('test_rep', 1)
-
-        if db_status.get('need_pass', False):
-            text, ok = QInputDialog.getText(self, 'Retest authorization', 'Password:', QLineEdit.EchoMode.Password)
-            if ok and text == decrypt(self.config['fa_password']):
-                pass
-            else:
+            self.init_test_variables()
+            self.current_serial = self.serialno_display.text()
+            if not self.current_serial:
+                QMessageBox.information(self, 'Info', 'Enter serial number to test', buttons=QMessageBox.StandardButton.Ok)
+                self.serialno_display.setFocus()
                 return False
-        
-        self.tail_details['test_rep'] = curr_rep
-        self.start_test_button.setEnabled(True)
-        return True
+            
+            self.current_serial = self.current_serial.upper()
+            if not self.hw_serial and self.mode_label == 'PRODUCTION':
+                QMessageBox.critical(self, 'Error', 'Power Supply NOT connected', buttons=QMessageBox.StandardButton.Ok)
+                return False
+
+            # regex = re.fullmatch(r"K/d{11}", self.current_serial)
+            # if self.mode_label.text() == 'PRODUCTION' and not regex:
+            #     QMessageBox.information(self, 'Info', 'Incorrect serial format', buttons=QMessageBox.StandardButton.Ok)
+            #     return False
+
+            db_status = self.dbconn.get_db_status(self.current_serial)
+            if 'error' in db_status:
+                QMessageBox.warning(self, 'Warning', db_status.get('error', ''), buttons=QMessageBox.StandardButton.Ok)
+                if self.mode_label.text() == 'PRODUCTION':
+                    return False
+
+            self.ponum_display.setText(db_status.get('po_num', ''))
+            curr_rep = db_status.get('test_rep', 1)
+
+            if db_status.get('need_pass', False):
+                text, ok = QInputDialog.getText(self, 'Retest authorization', 'Password:', QLineEdit.EchoMode.Password)
+                if ok and text == decrypt(self.config['fa_password']):
+                    pass
+                else:
+                    return False
+            
+            self.tail_details['test_rep'] = curr_rep
+            self.start_test_button.setEnabled(True)
+            return True
+        except Exception as e:
+            QMessageBox.warning(self, 'Error', str(e), Q_OK)
 
     def load_config(self):
         parser = configparser.ConfigParser()
@@ -466,29 +504,34 @@ class MainWindow(QMainWindow):
             self.config[key_std] = value
 
         if 'Database' in parser.sections():
-            db_host = parser.get('Database', 'Host')
-            db_schema = parser.get('Database', 'Customer')
-            db_model = parser.get('Database', 'Model')
-            db_station = parser.get('Database', 'Station')
+            db_config = {}
+            for key, raw_value in parser['Database'].items():
+                key_std = key.lower().replace(' ', '_')
+                db_config[key_std] = raw_value.strip('"')
+            
+            # db_host = parser.get('Database', 'Host')
+            # db_schema = parser.get('Database', 'Customer')
+            db_model = db_config.get('model', '').upper()
+            # db_station = parser.get('Database', 'Station')
 
-            self.config['model'] = db_model
-            self.config['database'] = {'host': db_host, 'customer': db_schema, 'model': db_model, 'station': db_station}
-            self.dbconn = DatabaseConn(db_host, db_schema, db_model, db_station)
+            # self.config['model'] = db_model
+            # self.config['database'] = {'host': db_host, 'customer': db_schema, 'model': db_model, 'station': db_station}
+            self.config['database'] = db_config
+            self.dbconn = DatabaseConn(db_config)
             self.model_display.setText(db_model)
         else:
-            self.config['database'] = None
+            self.config['database'] = {}
             self.dbconn = None
 
         if 'Camera' in parser.sections():
-            cam_src = parser.getint('Camera', 'Source')
-            cam_exp = parser.getint('Camera', 'Exposure')
-            cam_focus = parser.getint('Camera', 'Focus')
-            cam_zoom = parser.getint('Camera', 'Zoom')
-            self.config['cam_source'] = cam_src
-            self.config['cam_params'] = {'exposure': cam_exp, 'focus': cam_focus, 'zoom': cam_zoom}
+            cam_params = {}
+            for key, raw_value in parser['Camera'].items():
+                key_std = key.lower().replace(' ', '_')
+                cam_params[key_std] = int(raw_value.strip('"'))
+
+            self.config['cam_params'] = cam_params
         else:
-            self.config['cam_source'] = 0
-            self.config['cam_params'] = {'exposure': -5, 'focus': 0, 'zoom': 100}
+            self.config['cam_params'] = {}
 
     def load_roi_template(self):
         coords_file = self.config['template_path']
@@ -526,6 +569,23 @@ class MainWindow(QMainWindow):
         # print(test_params)
         self.tableWidget.setRowCount(51)
         return test_params
+
+    def set_new_camParams(self, new_params: dict):
+        self.config['cam_params'].update(new_params)
+
+        parser = configparser.ConfigParser()
+        parser.optionxform = str
+        parser.read('Settings.ini')
+
+        for key, value in new_params.items():
+            key_inv = key.replace('_', ' ').title()
+            parser.set('Camera', key_inv, f"{value}")
+
+        old_settings = Path('Settings.ini')
+        now = datetime.now()
+        old_settings.rename(f'_Settings_{now.strftime(r"%y%m%d_%H%M%S")}.ini')
+        with open('Settings.ini', 'w') as configfile:
+            parser.write(configfile)
 
     def write_csv(self):
         if len(self.csv_headers) == 0:
@@ -575,7 +635,7 @@ if __name__=='__main__':
 
     app = QApplication(sys.argv)
     app.setStyle('windowsvista')
-    window = MainWindow('v1.1.0')
+    window = MainWindow('v1.2.0')
     window.show()
 
     # Start the event loop.

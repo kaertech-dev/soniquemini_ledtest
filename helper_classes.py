@@ -12,27 +12,32 @@ from PyQt6 import uic
 
 from roi_debug import DebugROI, get_path
 
-# def get_path(raw_path):
-#     try:
-#         ret = os.path.join(sys._MEIPASS, raw_path)
-#     except Exception:
-#         ret = os.path.join('.', raw_path)
-#     return ret
+Q_OK = QMessageBox.StandardButton.Ok
+Q_YES = QMessageBox.StandardButton.Yes
+Q_NO = QMessageBox.StandardButton.No
+
+__camera = None
+def camera_handler(source):
+    global __camera
+    if __camera is None:
+        __camera = cv2.VideoCapture(source, cv2.CAP_DSHOW)
+        # print(__camera.get(cv2.CAP_PROP_FRAME_WIDTH), __camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    return __camera
 
 class Camera:
-    def __init__(self, source: int, cam_params: dict):
+    def __init__(self, cam_params: dict):
         try:
-            self.cap = cv2.VideoCapture(source, cv2.CAP_DSHOW)
+            self.cap = camera_handler(cam_params['source'])
             self.cam_params = cam_params
-            self.exposure = cam_params.get('exposure')
-            self.focus = cam_params.get('focus')
-            self.zoom = cam_params.get('zoom')
-            self.frame = None
+            # self.exposure = cam_params.get('exposure')
+            # self.focus = cam_params.get('focus')
+            # self.zoom = cam_params.get('zoom')
 
             # print(cam_params)
+            self.set_properties()
 
-            # self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-            # self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 960)
+            # self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)
+            # self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 640)
             # self.cap.set(cv2.CAP_PROP_EXPOSURE, self.exposure)
             # self.cap.set(cv2.CAP_PROP_FOCUS, self.focus)
             # self.cap.set(cv2.CAP_PROP_ZOOM, self.zoom)
@@ -46,35 +51,51 @@ class Camera:
 
     def get_properties(self):
         return self.cam_params
+
+    def set_properties(self):
+        # prop_id = {'width': cv2.CAP_PROP_FRAME_WIDTH, 'height': cv2.CAP_PROP_FRAME_HEIGHT, 
+        #            'exposure': cv2.CAP_PROP_EXPOSURE, 'focus': cv2.CAP_PROP_FOCUS, 'zoom': cv2.CAP_PROP_ZOOM}
+        # self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+        
+        # for key, value in self.cam_params.items():
+        #     if key not in prop_id:
+        #         continue
+        #     self.cap.set(prop_id[key], value)
+        # self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.cam_params['width'])
+        # self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.cam_params['height'])
+        self.cap.set(cv2.CAP_PROP_EXPOSURE, self.cam_params['exposure'])
+        self.cap.set(cv2.CAP_PROP_FOCUS, self.cam_params['focus'])
+        self.cap.set(cv2.CAP_PROP_ZOOM, self.cam_params['zoom'])
+
+    def read_properties(self):
+        width = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+        height = self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        exposure = self.cap.get(cv2.CAP_PROP_EXPOSURE)
+        focus = self.cap.get(cv2.CAP_PROP_FOCUS)
+        zoom = self.cap.get(cv2.CAP_PROP_ZOOM)
+        print(width, height, exposure, focus, zoom)
     
-    def get_image(self):
+    def capture_frame(self):
         try:
             # remove 20 frames from the buffer to get the most recent frame (as possible)
-            self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
-            self.cap.set(cv2.CAP_PROP_EXPOSURE, self.exposure)
-            self.cap.set(cv2.CAP_PROP_FOCUS, self.focus)
-            self.cap.set(cv2.CAP_PROP_ZOOM, self.zoom)
-            for _ in range(10):
-                # self.cap.set(cv2.CAP_PROP_EXPOSURE, self.exposure)
-                # self.cap.set(cv2.CAP_PROP_FOCUS, self.focus)
-                # self.cap.set(cv2.CAP_PROP_ZOOM, self.zoom)
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.cam_params['width'])
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.cam_params['height'])
+
+            for _ in range(20):
+                self.set_properties()
                 ret, frame = self.cap.read()
+                # self.read_properties()
 
-            # print('-- exposure', self.cap.get(cv2.CAP_PROP_EXPOSURE))
-            # print('-- focus', self.cap.get(cv2.CAP_PROP_FOCUS))
-            # print('-- zoom', self.cap.get(cv2.CAP_PROP_ZOOM))
-
-            # print(frame.shape)
-            self.frame = frame
-            return True, self.frame
+            return True, frame
         except Exception as e:
             # print(e)
-            return False, str(e)
+            raise e
 
-class SettingsBox(QDialog):
-    def __init__(self, template_path, cam_object: Camera):
+class old_SettingsBox(QDialog):
+    def __init__(self, parent, template_path, cam_object: Camera):
         super().__init__()
         uic.loadUi(get_path('layout/settings_box.ui'), self)
+        self.parent_obj = parent
         self.dev_button.clicked.connect(self.set_dev)
         self.prod_button.clicked.connect(self.set_prod)
         self.template_path = template_path
@@ -83,15 +104,14 @@ class SettingsBox(QDialog):
         self.mode = ''
 
     def launch_debugger(self):
-        roi_debugger = DebugROI(self.camera.get_properties())
-        _, img = self.camera.get_image()
-        flag = roi_debugger.setImage(img)
-        if not flag:
-            QMessageBox.warning(self, 'Camera Error', 'Camera failed to open')
-            
-        roi_debugger.importTable(self.template_path)
-        roi_debugger.show()
-        self.close()
+        try:
+            roi_debugger = DebugROI(self.camera, self.camera.get_properties())
+            roi_debugger.new_cam_params.connect(self.parent_obj.set_new_camParams)
+            roi_debugger.importTable(self.template_path)
+            roi_debugger.show()
+            self.close()
+        except Exception as e:
+            QMessageBox.warning(self, 'Error', str(e), Q_OK)
 
     def set_dev(self):
         self.mode = 'DEVELOPMENT'
@@ -99,6 +119,58 @@ class SettingsBox(QDialog):
 
     def set_prod(self):
         self.mode = 'PRODUCTION'
+        self.accept()
+
+class SettingsBox(QDialog):
+    # login_details = pyqtSignal(str, str, str)
+    def __init__(self, parent, template_path, cam_object: Camera):
+        super().__init__()
+        uic.loadUi(get_path('layout/settings_box.ui'), self)
+
+        self.parent_obj = parent
+        self.oprtr_en_input.setText(parent.oprtr_display.text())
+        self.shift_input.setCurrentText(parent.shift_display.text())
+        self.dev_button.clicked.connect(self.set_dev)
+        self.prod_button.clicked.connect(self.set_prod)
+        self.template_path = template_path
+        self.camera = cam_object
+        self.launchGUI_button.clicked.connect(self.launch_debugger)
+        self.output = {'oprtr_en': '', 'shift': '', 'mode': ''}
+
+    def launch_debugger(self):
+        try:
+            roi_debugger = DebugROI(self.camera, self.camera.get_properties())
+            roi_debugger.new_cam_params.connect(self.parent_obj.set_new_camParams)
+            roi_debugger.importTable(self.template_path)
+            roi_debugger.show()
+            self.close()
+        except Exception as e:
+            QMessageBox.warning(self, 'Error', str(e), Q_OK)
+
+    def set_dev(self):
+        user = self.oprtr_en_input.text().strip()
+        shift = self.shift_input.currentText().strip()
+        if not (user and shift):
+            QMessageBox.information(self, 'Info', 'Please enter all details', Q_OK)
+            return
+
+        self.output['operator_en'] = user.upper()
+        self.output['shift'] = shift.upper()
+        self.output['mode'] = 'DEVELOPMENT'
+        # self.login_details.emit(user.upper(), shift.upper(), 'DEVELOPMENT')
+        self.accept()
+
+    def set_prod(self):
+        user = self.oprtr_en_input.text().strip()
+        shift = self.shift_input.currentText().strip()
+        if not (user and shift):
+            QMessageBox.information(self, 'Info', 'Please enter all details', Q_OK)
+            return
+        
+        self.output['operator_en'] = user.upper()
+        self.output['shift'] = shift.upper()
+        self.output['mode'] = 'PRODUCTION'
+        # self.login_details.emit(user.upper(), shift.upper(), 'PRODUCTION')
         self.accept()
 
 class TestResultsWindow(QDialog):
@@ -172,7 +244,7 @@ class TestResultsWindow(QDialog):
                 else:
                     return 'OKAY'
             else:
-                if value == -1:
+                if value <= low:
                     return 'OKAY'
                 else:
                     return 'EXTRA'
@@ -183,14 +255,14 @@ class TestResultsWindow(QDialog):
             if (led_num % 10) > 0 and (led_num % 10) <= 6:
                 if value == -1:
                     return 'NONE'
-                elif value <= low:
+                elif value < low:
                     return 'LOW'
-                elif value >= high:
+                elif value > high:
                     return 'HIGH'
                 else:
                     return 'OKAY'
             else:
-                if value == -1:
+                if value <= low:
                     return 'OKAY'
                 else:
                     return 'EXTRA'
@@ -198,9 +270,9 @@ class TestResultsWindow(QDialog):
         if self.current_mode == 3:
             if value == -1:
                 return 'NONE'
-            elif value <= low:
+            elif value < low:
                 return 'LOW'
-            elif value >= high:
+            elif value > high:
                 return 'HIGH'
             else:
                 return 'OKAY'
