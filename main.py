@@ -50,7 +50,6 @@ class MainWindow(QMainWindow):
 
         self.config = {}
         self.csv_headers = []
-        # self.login_details = {'operator_en': '', 'shift': 'DEV_MODE'}
 
         self.load_config()
         self.roi_locations = self.load_roi_template()
@@ -70,43 +69,33 @@ class MainWindow(QMainWindow):
         self.init_test_variables()
         self.start_test_button.setEnabled(False)
 
+        self.golden_tested_flag = None
+        self.golden_sn = None
+
         self.tableWidget.setColumnWidth(0, 150)
         self.tableWidget.setColumnWidth(1, 100)
         self.tableWidget.setColumnWidth(2, 160)
         self.tableWidget.setColumnWidth(3, 100)
         self.tableWidget.setColumnWidth(4, 80)
-        self.tableWidget.setColumnWidth(5, 160)
-
-        # timer = QTimer(self)
-        # timer.timeout.connect(self.update_time)
-        # timer.start(1000)
+        self.tableWidget.setColumnWidth(5, 147)
 
         # Connect button click signal to slot
-        # self.login_button.clicked.connect(self.login)
         self.start_test_button.clicked.connect(self.start_test)
         self.serialno_display.returnPressed.connect(self.validate_serial)
         self.serialno_display.textChanged.connect(self.reinit)
         self.settings_button.clicked.connect(self.open_settings)
         self.abort_button.clicked.connect(self.abort_signal)
-        # self.exit_button.clicked.connect(self.close)
 
         self.results_win.roi_done_signal.connect(self.update_test_progress)
         self.results_win.test_complete_signal.connect(self.mode_test_done)
 
         # Keyboard shortcuts
         self.initialize_shortcuts()
-
-    # def update_time(self):
-    #     now = datetime.now()
-    #     self.date_display.setText(now.date().strftime(r'%m/%d/%Y'))
-    #     self.time_display.setText(now.time().strftime(r'%I:%M:%S %p'))
-
-        # if now.time().strftime(r'%I:%M:%S') == '07:00:00':
-        #     self.is_golden_tested = False
     
     def reinit(self, new_text):
         if new_text == '':
             self.init_test_variables()
+            self.ponum_display.setText('')
             self.start_test_button.setEnabled(False)
             self.abort_button.setEnabled(False)
     
@@ -123,26 +112,6 @@ class MainWindow(QMainWindow):
         SC_exit_app = QShortcut(QKeySequence("End"), self)
         SC_exit_app.activated.connect(self.close)
 
-    # def login(self):
-    #     if self.login_button.text() == 'LOGIN':
-    #         user = self.oprtr_en_input.text()
-    #         shift = self.shift_input.currentText()
-
-    #         if user and shift:
-    #             self.login_details['operator_en'] = user.strip().upper()
-    #             self.login_details['shift'] = shift.strip().upper()
-    #             self.oprtr_en_input.setEnabled(False)
-    #             self.shift_input.setEnabled(False)
-    #             self.login_button.setText('LOGOUT')
-    #         else:
-    #             QMessageBox.information(self, 'Info', 'Please enter all details', buttons=QMessageBox.StandardButton.Ok)
-    #     else:
-    #         self.login_details['operator_en'] = 'DEV_MODE'
-    #         self.login_details['shift'] = ''
-    #         self.oprtr_en_input.setEnabled(True)
-    #         self.shift_input.setEnabled(True)
-    #         self.login_button.setText('LOGIN')
-
     def connect_port(self):
         try:
             self.hw_serial = serial.Serial(port = self.config['hw_port'], baudrate = int(self.config['baud_rate']))
@@ -154,7 +123,7 @@ class MainWindow(QMainWindow):
             self.hw_serial.flush()
             self.hw_timer.start(1000)
         except Exception as e:
-            QMessageBox.warning(self, 'Error', str(e), Q_OK)
+            QMessageBox.warning(self, 'Error', 'Power Supply not detected', Q_OK)
             self.hw_serial = None
             self.opcurr_display.setText("PS Not Connected")
     
@@ -197,6 +166,11 @@ class MainWindow(QMainWindow):
 
     def abort_signal(self):
         self.results_win.abort_test()
+        if self.mode2_res.isVisible():
+            self.mode2_res.close()
+        if self.mode3_res.isVisible():
+            self.mode3_res.close()
+        self.test_end()
 
     def enable_buttons(self, state: bool):
         if state == False:
@@ -215,6 +189,9 @@ class MainWindow(QMainWindow):
         self.start_test_time = 0
         self.progress_percent = 0
 
+        self.mode2_res = QMessageBox(QMessageBox.Icon.Information, 'MODE 1', "Enable Mode 2 then click 'OK' ", Q_OK)
+        self.mode3_res = QMessageBox(QMessageBox.Icon.Information, 'MODE 2', "Enable Mode 3 then click 'OK' ", Q_OK)
+
         self.test_progress.reset()
         self.tableWidget.clearContents()
         self.pass_fail_output.setText("")
@@ -230,22 +207,19 @@ class MainWindow(QMainWindow):
         self.serialno_display.textChanged.connect(self.reinit)
 
     def upload_results(self):
-        # if self.mode_label.text() == 'DEVELOPMENT':
-        #     self.write_csv()
-        # elif self.config['golden_check'] and not self.is_golden_tested and self.current_serial in self.golden_serials:
-        #     t_code = self.config['tester_code']
-        #     self.dbconn.log_golden_test(t_code, self.current_serial, self.tail_details['status'])
-        #     self.is_golden_tested = True
-        # else:
+        self.messages.setText('Uploading results...')
         self.write_csv()
         if self.mode_label.text() == 'PRODUCTION':
             try:
-                success, error_code = self.dbconn.db_insert(self.head_details, self.final_values, self.tail_details)
-                if not success:
-                    QMessageBox.critical(self, 'Error', error_code, buttons=QMessageBox.StandardButton.Ok)
-            except:
-                # self.write_csv()
-                pass
+                if self.current_serial == self.golden_sn:
+                    self.dbconn.log_golden_test(self.config['tester_code'], self.golden_sn, self.tail_details['status'])
+                    self.golden_tested_flag = True
+                else:
+                    success, error_code = self.dbconn.db_insert(self.head_details, self.final_values, self.tail_details)
+                    if not success:
+                        QMessageBox.critical(self, 'Error', error_code, buttons=Q_OK)
+            except Exception as e:
+                QMessageBox.warning(self, 'Error', str(e), Q_OK)
 
         QTimer.singleShot(10, self.test_end)
 
@@ -283,12 +257,16 @@ class MainWindow(QMainWindow):
             response = self.hw_serial.readline().decode('ascii', errors='ignore').strip()
             return None
 
+    def led_off(self):
+        res = subprocess.run(self.relay_on_cmd)
+        QTimer.singleShot(3000, lambda: subprocess.run(self.relay_off_cmd))
+
     def process_values(self):
+        self.led_off()
         self.activateWindow()
         self.final_values = self.results_win.final_values
         self.final_values.update(self.curr_values)
         # print(self.final_values)
-        # self.fail_reasons = self.results_win.fail_reasons
         low_fail = self.results_win.fail_reasons.get('LOW')
         high_fail = self.results_win.fail_reasons.get('HIGH')
         extra_fail = self.results_win.fail_reasons.get('EXTRA')
@@ -324,7 +302,6 @@ class MainWindow(QMainWindow):
         curr_param = f'mode{mode}_curr'
         self.curr_values[curr_param] = curr_meas
 
-        # row = len(self.roi_locations) + (mode*2) - 2 # 1 = 16, 2 = 18, 3 = 20
         high = float(self.test_parameters[curr_param]['high'])
         low = float(self.test_parameters[curr_param]['low'])
         unit = self.test_parameters[curr_param]['unit']
@@ -338,11 +315,24 @@ class MainWindow(QMainWindow):
         row = (mode*17) - 1
         self.update_test_progress(row, curr_param, high, curr_meas, low, unit, status)
 
-    def button_click(self):
-        res = subprocess.run(self.relay_off_cmd)
-        # QTimer.singleShot(100, self.__on)
+    def button_click(self, start=False):
         res = subprocess.run(self.relay_on_cmd)
         res = subprocess.run(self.relay_off_cmd)
+
+        success, frame = self.camera.capture_frame()
+        if not success:
+            QMessageBox.critical(self, 'Error', frame, buttons=Q_OK)
+            return
+        self.results_win.add_image(frame)
+
+        if start:
+            self.results_win.show()
+            self.results_win.start_test_loop()
+        else:
+            self.results_win.index = 0
+            self.results_win.current_mode += 1
+            self.results_win.activateWindow()
+            self.results_win.update_test()
 
     def mode_test_done(self, mode, status):
         try:
@@ -350,24 +340,8 @@ class MainWindow(QMainWindow):
             hw_result = self.read_current()
             self.add_curr_value(mode, hw_result)
 
-            if mode == 1:
-                res = QMessageBox.information(self.results_win, 'MODE 1', f"MODE 1 {status}.\nEnable Mode 2 then click 'OK' ", QMessageBox.StandardButton.Ok)
-                # self.button_click()
-                success, frame = self.camera.capture_frame()
-                if not success:
-                    QMessageBox.critical(self, 'Error', frame, buttons=QMessageBox.StandardButton.Ok)
-                    return
-                self.results_win.add_image(frame)
-                return
-            elif mode == 2:
-                res = QMessageBox.information(self.results_win, 'MODE 2', f"MODE 2 {status}.\nEnable Mode 3 then click 'OK' ", QMessageBox.StandardButton.Ok)
-                # self.button_click()
-                success, frame = self.camera.capture_frame()
-                if not success:
-                    QMessageBox.critical(self, 'Error', frame, buttons=QMessageBox.StandardButton.Ok)
-                    return
-                self.results_win.add_image(frame)
-                return
+            if mode < 3:
+                self.button_click()
             else:
                 QTimer.singleShot(10, self.process_values)
         except Exception as e:
@@ -381,19 +355,9 @@ class MainWindow(QMainWindow):
         self.tableWidget.setItem(row, 4, QTableWidgetItem(unit))
         self.tableWidget.setItem(row, 5, QTableWidgetItem(status))
 
-        # curr_value = self.tableWidget.item(row, 2)
-        # if curr_value:
-        #     value = curr_value.text() + ', ' + str(value)
-        # self.tableWidget.setItem(row, 2, QTableWidgetItem(str(value)))
-
-        # curr_entry = self.tableWidget.item(row, 5)
-        # if curr_entry:
-        #     status = curr_entry.text() + ', ' + status
-        # self.tableWidget.setItem(row, 5, QTableWidgetItem(status))
-
         self.progress_percent += self.bar_step
         # print(self.progress_percent)
-        self.test_progress.setValue(int(round(self.progress_percent, 0)))
+        self.test_progress.setValue(round(self.progress_percent))
 
     def start_test(self):
         try:
@@ -405,27 +369,11 @@ class MainWindow(QMainWindow):
 
             self.head_details['serial_num'] = self.current_serial.upper()
             self.head_details['po_num'] = self.ponum_display.text()
-            # self.head_details.update(self.login_details)
             self.head_details['operator_en'] = self.oprtr_display.text()
             self.head_details['shift'] = self.shift_display.text()
             self.enable_buttons(False)
             self.messages.setText("Test in progress")
             self.start_test_time = time.time()
-
-            # Capture image from camera
-            # self.button_click()
-            success, frame = self.camera.capture_frame()
-            if not success:
-                QMessageBox.critical(self, 'Error', frame, buttons=QMessageBox.StandardButton.Ok)
-                return
-
-            if not self.results_win.isVisible():
-                self.results_win.show()
-            success = self.results_win.add_image(frame)
-            if not success:
-                return
-            
-            self.results_win.activateWindow()
 
             try:
                 if not self.hw_serial.is_open:
@@ -435,7 +383,8 @@ class MainWindow(QMainWindow):
 
             now = datetime.now()
             self.head_details['date_time'] = now.strftime(r"%Y-%m-%d %H:%M:%S")
-            self.results_win.start_test_loop()
+            self.results_win.abort = False
+            self.button_click(True)
         except Exception as e:
             QMessageBox.warning(self, 'Error', str(e), Q_OK)
     
@@ -445,32 +394,42 @@ class MainWindow(QMainWindow):
             shift = self.shift_display.text()
             if not (user and shift):
                 # if self.mode_label.text() == 'PRODUCTION':
-                QMessageBox.information(self, 'Info', 'Please login to start testing', buttons=QMessageBox.StandardButton.Ok)
+                QMessageBox.information(self, 'Info', 'Please login to start testing', buttons=Q_OK)
                 QTimer.singleShot(10, self.open_settings)
+                self.serialno_display.setText('')
                 return False
 
             self.init_test_variables()
             self.current_serial = self.serialno_display.text()
             if not self.current_serial:
-                QMessageBox.information(self, 'Info', 'Enter serial number to test', buttons=QMessageBox.StandardButton.Ok)
+                QMessageBox.information(self, 'Info', 'Enter serial number to test', buttons=Q_OK)
                 self.serialno_display.setFocus()
                 return False
             
             self.current_serial = self.current_serial.upper()
             if not self.hw_serial and self.mode_label == 'PRODUCTION':
-                QMessageBox.critical(self, 'Error', 'Power Supply NOT connected', buttons=QMessageBox.StandardButton.Ok)
+                QMessageBox.critical(self, 'Error', 'Power Supply NOT connected', buttons=Q_OK)
                 return False
+
+            if self.mode_label.text() == 'PRODUCTION':
+                self.golden_tested_flag, self.golden_sn = self.dbconn.get_golden_logs(self.config['tester_code'])
+                # print(self.golden_tested_flag, self.golden_sn)
+                # if self.golden_sn == '':
+                #     QMessageBox.information(self, 'Info', 'Golden Sample not yet registered', Q_OK)
+                if not self.golden_tested_flag and self.current_serial != self.golden_sn:
+                    QMessageBox.critical(self, 'Error', 'Please test the Golden Sample first', Q_OK)
+                    return False
 
             # regex = re.fullmatch(r"K/d{11}", self.current_serial)
             # if self.mode_label.text() == 'PRODUCTION' and not regex:
-            #     QMessageBox.information(self, 'Info', 'Incorrect serial format', buttons=QMessageBox.StandardButton.Ok)
+            #     QMessageBox.information(self, 'Info', 'Incorrect serial format', buttons=Q_OK)
             #     return False
 
             db_status = self.dbconn.get_db_status(self.current_serial)
-            if 'error' in db_status:
-                QMessageBox.warning(self, 'Warning', db_status.get('error', ''), buttons=QMessageBox.StandardButton.Ok)
-                if self.mode_label.text() == 'PRODUCTION':
-                    return False
+            if 'error' in db_status and self.mode_label.text() == 'PRODUCTION':
+                QMessageBox.warning(self, 'Warning', db_status.get('error', ''), buttons=Q_OK)
+                # if self.mode_label.text() == 'PRODUCTION':
+                return False
 
             self.ponum_display.setText(db_status.get('po_num', ''))
             curr_rep = db_status.get('test_rep', 1)
@@ -481,7 +440,7 @@ class MainWindow(QMainWindow):
                     pass
                 else:
                     return False
-            
+
             self.tail_details['test_rep'] = curr_rep
             self.start_test_button.setEnabled(True)
             return True
@@ -635,7 +594,7 @@ if __name__=='__main__':
 
     app = QApplication(sys.argv)
     app.setStyle('windowsvista')
-    window = MainWindow('v1.2.0')
+    window = MainWindow('v1.3.0')
     window.show()
 
     # Start the event loop.

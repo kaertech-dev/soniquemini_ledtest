@@ -32,6 +32,62 @@ class DatabaseConn:
             print(f"Database connection error: {e}")
             return None
 
+    def get_golden_logs(self, tester_code) -> tuple[int, str]:
+        try:
+            with self.connect('te') as conn:
+                with conn.cursor(DictCursor) as cursor:
+                    today = datetime.now()
+                    am = time(7,0,0)
+                    pm = time(19,0,0)
+                    # Set shift start/end
+                    if today.time() >= am and today.time() < pm:
+                        shift = [datetime.combine(today.date(), am), datetime.combine(today.date(), pm)]
+                    else:
+                        shift = [datetime.combine(today.date(), pm), datetime.combine(today.date()+timedelta(days=1), am)]
+
+                    # Check if GS has been logged for the given shift
+                    query = " SELECT * FROM `golden_sample_logs` WHERE `tester_code` = %s ORDER BY `date_time_tested` DESC LIMIT 5"
+                    cursor.execute(query, (tester_code,))
+                    logs = cursor.fetchall()
+                    # print(logs)
+
+                    if len(logs) == 0:
+                        # If no logs, retrieve the GS serial from masterlist
+                        query = " SELECT `golden_sn` FROM `golden_sample_masterlist` WHERE `tester_code` = %s "
+                        cursor.execute(query, (tester_code,))
+                        golden_sn = cursor.fetchone()
+                        if golden_sn is None:
+                            return 1, ''
+                        return 0, golden_sn['golden_sn']
+
+                    # Retrieve GS serial from logs
+                    golden_list = [row['golden_sn'] for row in logs]
+                    if logs[0]['date_time_tested'] >= shift[0] and logs[0]['date_time_tested'] <= shift[1]:
+                        return 1, golden_list[0]
+                    else:
+                        return 0, golden_list[0]
+        except Exception as e:
+            return -1, str(e)
+
+    def log_golden_test(self, tester_code, serial_num, status):
+        try:
+            with self.connect('te') as conn:
+                with conn.cursor(DictCursor) as cursor:
+                    today = datetime.now()
+                    query = " INSERT INTO `golden_sample_logs` (tester_code, golden_sn, model, date_time_tested, status) VALUES (%s, %s, %s, %s, %s)"
+                    cursor.execute(query, (tester_code, serial_num, self.model, today, status))
+                    conn.commit()
+
+        except Exception as e:
+            print(f'Error: {e}')
+            # raise e
+        
+        except AttributeError as e:
+            return False, e
+
+        except TypeError as e:
+            return False, 'Database connection error'
+
     def is_golden_tested(self):
         try:
             with self.connect('te') as conn:
@@ -75,18 +131,18 @@ class DatabaseConn:
             print(f'Error: {e}')
             return False
 
-    def log_golden_test(self, tester_code, serial_num, status):
-        try:
-            with self.connect('te') as conn:
-                with conn.cursor(DictCursor) as cursor:
-                    today = datetime.now()
-                    query = " INSERT INTO `golden_sample_logs` VALUES (%s, %s, %s, %s, %s)"
-                    cursor.execute(query, (tester_code, serial_num, self.model, today, status))
-                    conn.commit()
+    # def log_golden_test(self, tester_code, serial_num, status):
+    #     try:
+    #         with self.connect('te') as conn:
+    #             with conn.cursor(DictCursor) as cursor:
+    #                 today = datetime.now()
+    #                 query = " INSERT INTO `golden_sample_logs` VALUES (%s, %s, %s, %s, %s)"
+    #                 cursor.execute(query, (tester_code, serial_num, self.model, today, status))
+    #                 conn.commit()
 
-        except Exception as e:
-            print(f'Error: {e}')
-            # raise e
+    #     except Exception as e:
+    #         print(f'Error: {e}')
+    #         # raise e
 
     def prev_station_ok(self, serial_raw) -> tuple[bool, str]:
         serial_num = serial_raw.split('_')[0]
@@ -179,7 +235,7 @@ class DatabaseConn:
                         cursor.execute(col_query)
                         results = cursor.fetchall()
                         self.previous_stations = [col['Field'] for col in results]
-                        print(self.previous_stations)
+                        # print(self.previous_stations)
 
                     curr_test_rep = 0
                     failed_stations = []

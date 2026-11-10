@@ -359,7 +359,7 @@ class DebugROI(QDialog):
         now = datetime.now()
         if not self.orig_source:
             self.orig_source = 'soniquemini_template.txt'
-        os.rename(self.orig_source, f'roi_{now.strftime(r"%Y-%b-%d_%H-%M-%S")}.txt')
+        os.rename(self.orig_source, f'_template_{now.strftime(r"%y%m%d_%H%M%S")}.txt')
 
         with open(self.orig_source, 'w') as file:
             # Include header so we know what the dimensions are for

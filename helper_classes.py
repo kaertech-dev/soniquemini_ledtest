@@ -91,35 +91,35 @@ class Camera:
             # print(e)
             raise e
 
-class old_SettingsBox(QDialog):
-    def __init__(self, parent, template_path, cam_object: Camera):
-        super().__init__()
-        uic.loadUi(get_path('layout/settings_box.ui'), self)
-        self.parent_obj = parent
-        self.dev_button.clicked.connect(self.set_dev)
-        self.prod_button.clicked.connect(self.set_prod)
-        self.template_path = template_path
-        self.camera = cam_object
-        self.launchGUI_button.clicked.connect(self.launch_debugger)
-        self.mode = ''
+# class old_SettingsBox(QDialog):
+#     def __init__(self, parent, template_path, cam_object: Camera):
+#         super().__init__()
+#         uic.loadUi(get_path('layout/settings_box.ui'), self)
+#         self.parent_obj = parent
+#         self.dev_button.clicked.connect(self.set_dev)
+#         self.prod_button.clicked.connect(self.set_prod)
+#         self.template_path = template_path
+#         self.camera = cam_object
+#         self.launchGUI_button.clicked.connect(self.launch_debugger)
+#         self.mode = ''
 
-    def launch_debugger(self):
-        try:
-            roi_debugger = DebugROI(self.camera, self.camera.get_properties())
-            roi_debugger.new_cam_params.connect(self.parent_obj.set_new_camParams)
-            roi_debugger.importTable(self.template_path)
-            roi_debugger.show()
-            self.close()
-        except Exception as e:
-            QMessageBox.warning(self, 'Error', str(e), Q_OK)
+#     def launch_debugger(self):
+#         try:
+#             roi_debugger = DebugROI(self.camera, self.camera.get_properties())
+#             roi_debugger.new_cam_params.connect(self.parent_obj.set_new_camParams)
+#             roi_debugger.importTable(self.template_path)
+#             roi_debugger.show()
+#             self.close()
+#         except Exception as e:
+#             QMessageBox.warning(self, 'Error', str(e), Q_OK)
 
-    def set_dev(self):
-        self.mode = 'DEVELOPMENT'
-        self.accept()
+#     def set_dev(self):
+#         self.mode = 'DEVELOPMENT'
+#         self.accept()
 
-    def set_prod(self):
-        self.mode = 'PRODUCTION'
-        self.accept()
+#     def set_prod(self):
+#         self.mode = 'PRODUCTION'
+#         self.accept()
 
 class SettingsBox(QDialog):
     # login_details = pyqtSignal(str, str, str)
@@ -129,6 +129,7 @@ class SettingsBox(QDialog):
 
         self.parent_obj = parent
         self.oprtr_en_input.setText(parent.oprtr_display.text())
+        self.oprtr_en_input.setFocus()
         self.shift_input.setCurrentText(parent.shift_display.text())
         self.dev_button.clicked.connect(self.set_dev)
         self.prod_button.clicked.connect(self.set_prod)
@@ -282,9 +283,11 @@ class TestResultsWindow(QDialog):
             return
         
         if self.index == len(self.roi_list):
+            print('done mode', self.current_mode, self.index)
             self.test_complete_signal.emit(self.current_mode, self.mode_status)
-            self.index = 0
-            self.current_mode += 1
+            # self.index = 0
+            # self.current_mode += 1
+            return
 
         if self.current_mode > 3:
             # End of testing
@@ -324,6 +327,7 @@ class TestResultsWindow(QDialog):
 
     def abort_test(self):
         self.abort = True
+        self.current_mode = 100
 
     def start_test_loop(self):
         # reset to default
@@ -333,6 +337,8 @@ class TestResultsWindow(QDialog):
         self.current_mode = 1
         self.mode_status = 'PASS'
         self.mode_fr = {1:[], 2:[], 3:[]}
+
+        print('started', self.index, self.current_mode)
 
         QTimer.singleShot(0, self.update_test)
     

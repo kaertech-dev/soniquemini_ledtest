@@ -10,11 +10,11 @@
     <x>0</x>
     <y>0</y>
     <width>400</width>
-    <height>260</height>
+    <height>320</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Faceware Pro Final Optical Tester</string>
+   <string>Sonique Mini LED Tester</string>
   </property>
   <widget class="QWidget" name="gridLayoutWidget">
    <property name="geometry">
@@ -22,7 +22,7 @@
      <x>0</x>
      <y>0</y>
      <width>401</width>
-     <height>261</height>
+     <height>321</height>
     </rect>
    </property>
    <layout class="QGridLayout" name="gridLayout">
@@ -41,6 +41,95 @@
     <property name="spacing">
      <number>20</number>
     </property>
+    <item row="4" column="1">
+     <widget class="QPushButton" name="launchGUI_button">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>200</width>
+        <height>50</height>
+       </size>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>10</pointsize>
+        <bold>false</bold>
+       </font>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">background-color: rgb(255, 255, 255);</string>
+      </property>
+      <property name="text">
+       <string>Launch Debugger GUI</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="0" colspan="2">
+     <layout class="QHBoxLayout" name="horizontalLayout_2">
+      <item>
+       <widget class="QPushButton" name="dev_button">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>200</width>
+          <height>50</height>
+         </size>
+        </property>
+        <property name="font">
+         <font>
+          <pointsize>13</pointsize>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">background-color: rgb(170, 255, 255);</string>
+        </property>
+        <property name="text">
+         <string>DEVELOPMENT</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="prod_button">
+        <property name="maximumSize">
+         <size>
+          <width>200</width>
+          <height>50</height>
+         </size>
+        </property>
+        <property name="font">
+         <font>
+          <pointsize>13</pointsize>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">background-color: rgb(255, 255, 0);</string>
+        </property>
+        <property name="text">
+         <string>PRODUCTION</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item row="3" column="0" colspan="2">
+     <widget class="Line" name="line">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+     </widget>
+    </item>
     <item row="0" column="1">
      <layout class="QFormLayout" name="formLayout">
       <item row="0" column="0">
@@ -146,38 +235,28 @@
       </item>
      </layout>
     </item>
-    <item row="3" column="1">
-     <widget class="QPushButton" name="launchGUI_button">
+    <item row="4" column="0">
+     <widget class="QLabel" name="label_2">
       <property name="sizePolicy">
-       <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+       <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
         <horstretch>0</horstretch>
         <verstretch>0</verstretch>
        </sizepolicy>
       </property>
-      <property name="maximumSize">
-       <size>
-        <width>200</width>
-        <height>50</height>
-       </size>
-      </property>
       <property name="font">
        <font>
-        <pointsize>10</pointsize>
-        <bold>false</bold>
+        <pointsize>12</pointsize>
+        <bold>true</bold>
        </font>
       </property>
       <property name="styleSheet">
-       <string notr="true">background-color: rgb(255, 255, 255);</string>
+       <string notr="true">color: rgb(0, 85, 255);</string>
       </property>
       <property name="text">
-       <string>Launch Debugger GUI</string>
+       <string>ROI Template</string>
       </property>
-     </widget>
-    </item>
-    <item row="2" column="0" colspan="2">
-     <widget class="Line" name="line">
-      <property name="orientation">
-       <enum>Qt::Horizontal</enum>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
       </property>
      </widget>
     </item>
@@ -206,88 +285,23 @@
       </property>
      </widget>
     </item>
-    <item row="3" column="0">
-     <widget class="QLabel" name="label_2">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="font">
-       <font>
-        <pointsize>12</pointsize>
-        <bold>true</bold>
-       </font>
-      </property>
-      <property name="styleSheet">
-       <string notr="true">color: rgb(0, 85, 255);</string>
-      </property>
-      <property name="text">
-       <string>ROI Template</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignCenter</set>
+    <item row="1" column="0" colspan="2">
+     <widget class="Line" name="line_2">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
       </property>
      </widget>
-    </item>
-    <item row="1" column="0" colspan="2">
-     <layout class="QHBoxLayout" name="horizontalLayout_2">
-      <item>
-       <widget class="QPushButton" name="dev_button">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>200</width>
-          <height>50</height>
-         </size>
-        </property>
-        <property name="font">
-         <font>
-          <pointsize>13</pointsize>
-          <bold>true</bold>
-         </font>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">background-color: rgb(170, 255, 255);</string>
-        </property>
-        <property name="text">
-         <string>DEVELOPMENT</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="prod_button">
-        <property name="maximumSize">
-         <size>
-          <width>200</width>
-          <height>50</height>
-         </size>
-        </property>
-        <property name="font">
-         <font>
-          <pointsize>13</pointsize>
-          <bold>true</bold>
-         </font>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">background-color: rgb(255, 255, 0);</string>
-        </property>
-        <property name="text">
-         <string>PRODUCTION</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
     </item>
    </layout>
   </widget>
  </widget>
+ <tabstops>
+  <tabstop>oprtr_en_input</tabstop>
+  <tabstop>shift_input</tabstop>
+  <tabstop>dev_button</tabstop>
+  <tabstop>prod_button</tabstop>
+  <tabstop>launchGUI_button</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>
